@@ -17,7 +17,6 @@ This is a Swift-based macOS menu bar app that helps users miss fewer meetings. I
 - Test: `script/test`
 - Lint: `script/lint`
 - Package: `script/package`
-- Release check: `script/release`
 
 All common work should go through the scripts under `script/`. This follows the "scripts to rule them all" pattern.
 
