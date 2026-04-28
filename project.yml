@@ -1,7 +1,7 @@
 name: Shit
 
 options:
-  bundleIdPrefix: com.grantbirki
+  bundleIdPrefix: io.birki
   deploymentTarget:
     macOS: "26.0"
 
@@ -28,12 +28,12 @@ targets:
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         GIT_SHA: $(GIT_SHA)
         LSUIElement: true
-        NSCalendarsFullAccessUsageDescription: Shit reads your local calendars to alert you when meetings are starting.
+        NSCalendarsFullAccessUsageDescription: Shit reads your local calendars to alert you when meetings are starting so you don't miss them. Oh shit!
         NSHighResolutionCapable: true
     settings:
       base:
         APP_DISPLAY_NAME: Shit
-        PRODUCT_BUNDLE_IDENTIFIER: com.grantbirki.shit
+        PRODUCT_BUNDLE_IDENTIFIER: io.birki.shit
         SWIFT_VERSION: 6.0
         ENABLE_CODE_COVERAGE: NO
         CLANG_COVERAGE_MAPPING: NO
@@ -43,7 +43,7 @@ targets:
       configs:
         Debug:
           APP_DISPLAY_NAME: Shit Dev
-          PRODUCT_BUNDLE_IDENTIFIER: com.grantbirki.shit.dev
+          PRODUCT_BUNDLE_IDENTIFIER: io.birki.shit.dev
   ShitTests:
     type: bundle.unit-test
     platform: macOS

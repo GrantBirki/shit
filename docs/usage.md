@@ -38,5 +38,5 @@ If Calendar access is denied, open System Settings -> Privacy & Security -> Cale
 For local development, reset the Debug app permission with:
 
 ```bash
-tccutil reset Calendar com.grantbirki.shit.dev
+tccutil reset Calendar io.birki.shit.dev
 ```

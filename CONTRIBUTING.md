@@ -39,7 +39,7 @@ Shit needs Calendar access so it can read locally synced Apple Calendar events. 
 To reset Calendar permissions for the Debug app:
 
 ```bash
-tccutil reset Calendar com.grantbirki.shit.dev
+tccutil reset Calendar io.birki.shit.dev
 ```
 
 ## Guidelines

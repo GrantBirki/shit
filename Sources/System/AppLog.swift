@@ -1,7 +1,7 @@
 import OSLog
 
 enum AppLog {
-    private static let subsystem = "com.grantbirki.shit"
+    private static let subsystem = "io.birki.shit"
 
     static let pointsOfInterest = OSLog(subsystem: subsystem, category: .pointsOfInterest)
     static let app = Logger(subsystem: subsystem, category: "App")
