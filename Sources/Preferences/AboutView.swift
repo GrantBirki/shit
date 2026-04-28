@@ -53,7 +53,7 @@ struct AboutView: View {
                 .font(.title2)
                 .fontWeight(.semibold)
 
-            Text("A local Calendar meeting alert app.")
+            Text("A local Calendar meeting alert app. Oh shit I missed another meeting.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
 
