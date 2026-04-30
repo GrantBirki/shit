@@ -13,6 +13,8 @@ Shit reads your locally synced Apple Calendar events and shows a hard-to-miss ov
 
 Requires macOS Tahoe 26 or later.
 
+https://github.com/user-attachments/assets/cf1a85d8-4d4b-42be-a2db-ff151c092b24
+
 ## Installation
 
 Homebrew (recommended):
