@@ -19,13 +19,14 @@ final class OverlayWindowController {
             let hostingController = NSHostingController(rootView: view)
             hostingController.view.frame = NSRect(origin: .zero, size: screen.frame.size)
             hostingController.view.autoresizingMask = [.width, .height]
-            let window = NSWindow(
+            let window = OverlayWindow(
                 contentRect: screen.frame,
                 styleMask: [.borderless],
                 backing: .buffered,
                 defer: false,
                 screen: screen
             )
+            window.onDismissShortcut = onDismiss
             window.contentViewController = hostingController
             window.setFrame(screen.frame, display: true)
             window.backgroundColor = .clear
@@ -44,5 +45,54 @@ final class OverlayWindowController {
     func dismiss() {
         windows.forEach { $0.orderOut(nil) }
         windows.removeAll()
+    }
+}
+
+enum OverlayKeyboard {
+    private static let escapeKeyCode: UInt16 = 53
+    private static let escapeCharacter = "\u{1B}"
+
+    static func isEscapeKey(keyCode: UInt16, charactersIgnoringModifiers: String?) -> Bool {
+        keyCode == escapeKeyCode || charactersIgnoringModifiers == escapeCharacter
+    }
+}
+
+private extension NSEvent {
+    var isOverlayDismissShortcut: Bool {
+        OverlayKeyboard.isEscapeKey(
+            keyCode: keyCode,
+            charactersIgnoringModifiers: charactersIgnoringModifiers
+        )
+    }
+}
+
+@MainActor
+private final class OverlayWindow: NSWindow {
+    var onDismissShortcut: (() -> Void)?
+
+    override var canBecomeKey: Bool {
+        true
+    }
+
+    override var canBecomeMain: Bool {
+        true
+    }
+
+    override func keyDown(with event: NSEvent) {
+        guard event.isOverlayDismissShortcut else {
+            super.keyDown(with: event)
+            return
+        }
+
+        onDismissShortcut?()
+    }
+
+    override func cancelOperation(_ sender: Any?) {
+        guard let onDismissShortcut else {
+            super.cancelOperation(sender)
+            return
+        }
+
+        onDismissShortcut()
     }
 }

@@ -29,7 +29,9 @@ By default, Shit alerts you 5 minutes before a meeting. The full-screen overlay 
 - Calendar name
 - Time range
 - Countdown or active-meeting status
-- Dismiss
+- Dismiss button
+
+Click Dismiss or press Escape to close the current overlay. The alert stays dismissed for that meeting so it does not immediately pop back up.
 
 ## Calendar Permissions
 
