@@ -58,6 +58,7 @@ struct AlertKey: Hashable {
 }
 
 struct MeetingDetector {
+    var activeStartGrace: TimeInterval = 15 * 60
     var dueLookback: TimeInterval = 45
 
     func filteredEvents(
@@ -114,6 +115,13 @@ struct MeetingDetector {
     }
 
     private func isDue(_ candidate: AlertCandidate, now: Date) -> Bool {
+        if candidate.offset == .atStart,
+           candidate.event.isActive(at: now),
+           now.timeIntervalSince(candidate.event.startDate) <= activeStartGrace
+        {
+            return true
+        }
+
         let triggerDate = candidate.triggerDate
         guard now >= triggerDate else { return false }
         guard now <= candidate.event.endDate else { return false }

@@ -109,9 +109,24 @@ final class MeetingDetectorTests: XCTestCase {
         XCTAssertEqual(due.map(\.offset), [.atStart])
     }
 
-    func testAtStartAlertDoesNotTriggerAfterLookbackWindow() {
+    func testCurrentActiveMeetingCanTriggerAtStartAfterLaunch() {
         let now = referenceDate
-        let start = now.addingTimeInterval(-46)
+        let start = now.addingTimeInterval(-120)
+        let event = MeetingEvent.fixture(startDate: start, endDate: now.addingTimeInterval(1800))
+
+        let due = detector.dueAlerts(
+            events: [event],
+            filter: MeetingFilterSettings(),
+            offsets: [.atStart],
+            now: now
+        )
+
+        XCTAssertEqual(due.map(\.offset), [.atStart])
+    }
+
+    func testCurrentActiveMeetingDoesNotTriggerAtStartAfterGraceWindow() {
+        let now = referenceDate
+        let start = now.addingTimeInterval(-16 * 60)
         let event = MeetingEvent.fixture(startDate: start, endDate: now.addingTimeInterval(1800))
 
         let due = detector.dueAlerts(
@@ -122,6 +137,21 @@ final class MeetingDetectorTests: XCTestCase {
         )
 
         XCTAssertTrue(due.isEmpty)
+    }
+
+    func testActiveStartGraceDoesNotReviveEarlierStaggeredAlert() {
+        let now = referenceDate
+        let start = now.addingTimeInterval(-120)
+        let event = MeetingEvent.fixture(startDate: start, endDate: now.addingTimeInterval(1800))
+
+        let due = detector.dueAlerts(
+            events: [event],
+            filter: MeetingFilterSettings(),
+            offsets: [.oneMinuteBefore, .atStart],
+            now: now
+        )
+
+        XCTAssertEqual(due.map(\.offset), [.atStart])
     }
 
     func testReturnsCustomThirtyMinuteAlertWithinLookbackWindow() throws {

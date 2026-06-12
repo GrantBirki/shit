@@ -12,7 +12,7 @@ Controls when meeting alerts appear.
 - An optional second alert can be set closer to the meeting start.
 - Dismissing one alert does not cancel a later alert for the same meeting.
 
-If the Mac is asleep at an alert time, that alert is skipped instead of appearing late.
+Advance alerts missed while the Mac is asleep are skipped instead of appearing late. An **At start** alert can still appear while the meeting is active, for up to 15 minutes after it begins.
 
 ## Calendar Filters
 

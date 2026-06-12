@@ -35,7 +35,7 @@ By default, Shit alerts you 5 minutes before a meeting. You can set the first al
 
 Click Dismiss or press Escape to close the current overlay. That alert stays dismissed so it does not immediately pop back up. If you configured a second alert, dismissing the first does not cancel the later alert.
 
-Alerts that occur while the Mac is asleep are skipped instead of being shown late.
+Advance alerts missed while the Mac is asleep are skipped instead of being shown late. An **At start** alert can still appear while the meeting is active, for up to 15 minutes after it begins.
 
 ## Calendar Permissions
 
