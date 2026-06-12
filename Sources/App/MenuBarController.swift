@@ -121,6 +121,10 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         refresh()
     }
 
+    func setVisible(_ isVisible: Bool) {
+        statusItem.isVisible = isVisible
+    }
+
     func menuNeedsUpdate(_: NSMenu) {
         refresh()
     }

@@ -43,4 +43,20 @@ final class AlertStateStoreTests: XCTestCase {
         XCTAssertFalse(store.shouldPresent(candidate, now: now.addingTimeInterval(30)))
         XCTAssertTrue(store.shouldPresent(candidate, now: now.addingTimeInterval(61)))
     }
+
+    func testDismissingFirstAlertDoesNotSuppressSecondAlert() throws {
+        let now = Date()
+        let event = MeetingEvent.fixture(startDate: now, endDate: now.addingTimeInterval(60))
+        let first = try AlertCandidate(
+            event: event,
+            offset: XCTUnwrap(AlertOffset(minutesBefore: 30))
+        )
+        let second = AlertCandidate(event: event, offset: .fiveMinutesBefore)
+        var store = AlertStateStore()
+
+        store.dismiss(first)
+
+        XCTAssertFalse(store.shouldPresent(first, now: now))
+        XCTAssertTrue(store.shouldPresent(second, now: now))
+    }
 }

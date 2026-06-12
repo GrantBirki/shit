@@ -27,7 +27,8 @@ brew install --cask grantbirki/tap/shit
 
 - Local Apple Calendar access through macOS privacy permissions.
 - Full-screen meeting overlay with Liquid Glass panels and controls.
-- Configurable alert timing, calendar filters, and launch at login.
+- Custom first and optional second alert timing from 0 to 120 minutes before a meeting.
+- Configurable calendar filters, launch at login, and menu bar icon visibility.
 - Native menu bar controls for checking meetings, reopening the current alert, settings, and quit.
 
 ## Usage
