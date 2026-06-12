@@ -64,6 +64,96 @@ struct SettingsSection<Content: View>: View {
     }
 }
 
+struct GlassIconToggle: View {
+    let title: String
+    let systemImage: String
+    @Binding var isOn: Bool
+    var isEnabled = true
+    var help: String?
+
+    var body: some View {
+        Toggle(isOn: $isOn) {
+            Image(systemName: systemImage)
+                .symbolVariant(isOn ? .fill : .none)
+                .frame(minWidth: 18)
+        }
+        .toggleStyle(.button)
+        .buttonStyle(.glass)
+        .buttonBorderShape(.capsule)
+        .disabled(!isEnabled)
+        .help(help ?? title)
+        .accessibilityLabel(title)
+        .accessibilityValue(isOn ? "On" : "Off")
+    }
+}
+
+struct SettingsToggleRow: View {
+    let title: String
+    let systemImage: String
+    @Binding var isOn: Bool
+    var isEnabled = true
+    var help: String?
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(title)
+                .font(.callout)
+
+            Spacer(minLength: 12)
+
+            GlassIconToggle(
+                title: title,
+                systemImage: systemImage,
+                isOn: $isOn,
+                isEnabled: isEnabled,
+                help: help
+            )
+        }
+    }
+}
+
+struct AlertLeadTimeControl: View {
+    let title: String
+    @Binding var minutes: Int
+    let range: ClosedRange<Int>
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Text(title)
+                .font(.callout)
+
+            Spacer(minLength: 12)
+
+            TextField("", value: $minutes, format: .number)
+                .textFieldStyle(.roundedBorder)
+                .multilineTextAlignment(.trailing)
+                .frame(width: 58)
+                .accessibilityLabel("\(title) minutes before")
+
+            Stepper("", value: $minutes, in: range)
+                .labelsHidden()
+                .fixedSize()
+                .accessibilityLabel("Adjust \(title.lowercased())")
+
+            Text(unitLabel)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .frame(width: 104, alignment: .leading)
+        }
+    }
+
+    private var unitLabel: String {
+        switch minutes {
+        case 0:
+            "at start"
+        case 1:
+            "minute before"
+        default:
+            "minutes before"
+        }
+    }
+}
+
 struct CalendarToggleRow: View {
     let calendar: CalendarSource
     @Binding var isIncluded: Bool
@@ -80,8 +170,12 @@ struct CalendarToggleRow: View {
 
             Spacer(minLength: 12)
 
-            Toggle("Include \(calendar.title)", isOn: $isIncluded)
-                .labelsHidden()
+            GlassIconToggle(
+                title: "Include \(calendar.title)",
+                systemImage: "checkmark",
+                isOn: $isIncluded,
+                help: "Include \(calendar.title) in meeting alerts."
+            )
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 9)

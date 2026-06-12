@@ -1,38 +1,36 @@
 import Foundation
 
-enum AlertTiming: String, CaseIterable, Identifiable {
-    case atStart
-    case oneMinuteBefore
-    case fiveMinutesBefore
-    case oneMinuteAndStart
+struct AlertOffset: Hashable {
+    static let supportedMinutes = 0 ... 120
+    static let atStart = AlertOffset(uncheckedMinutesBefore: 0)
+    static let oneMinuteBefore = AlertOffset(uncheckedMinutesBefore: 1)
+    static let fiveMinutesBefore = AlertOffset(uncheckedMinutesBefore: 5)
 
-    var id: String {
-        rawValue
+    let minutesBefore: Int
+
+    init?(minutesBefore: Int) {
+        guard Self.supportedMinutes.contains(minutesBefore) else {
+            return nil
+        }
+        self.minutesBefore = minutesBefore
+    }
+
+    private init(uncheckedMinutesBefore minutesBefore: Int) {
+        self.minutesBefore = minutesBefore
+    }
+
+    var timeInterval: TimeInterval {
+        -TimeInterval(minutesBefore * 60)
     }
 
     var label: String {
-        switch self {
-        case .atStart:
+        switch minutesBefore {
+        case 0:
             "At start"
-        case .oneMinuteBefore:
+        case 1:
             "1 minute before"
-        case .fiveMinutesBefore:
-            "5 minutes before"
-        case .oneMinuteAndStart:
-            "1 minute before + at start"
-        }
-    }
-
-    var offsets: [AlertOffset] {
-        switch self {
-        case .atStart:
-            [.atStart]
-        case .oneMinuteBefore:
-            [.oneMinuteBefore]
-        case .fiveMinutesBefore:
-            [.fiveMinutesBefore]
-        case .oneMinuteAndStart:
-            [.oneMinuteBefore, .atStart]
+        default:
+            "\(minutesBefore) minutes before"
         }
     }
 }

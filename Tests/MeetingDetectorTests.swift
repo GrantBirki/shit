@@ -51,7 +51,7 @@ final class MeetingDetectorTests: XCTestCase {
         XCTAssertEqual(filtered.map(\.id), ["real"])
     }
 
-    func testReturnsDueOneMinuteAndStartAlerts() {
+    func testReturnsOnlyCurrentlyDueOffsetFromStaggeredAlerts() {
         let start = referenceDate
         let now = start.addingTimeInterval(-30)
         let event = MeetingEvent.fixture(startDate: start)
@@ -59,7 +59,7 @@ final class MeetingDetectorTests: XCTestCase {
         let due = detector.dueAlerts(
             events: [event],
             filter: MeetingFilterSettings(),
-            timing: .oneMinuteAndStart,
+            offsets: [.oneMinuteBefore, .atStart],
             now: now
         )
 
@@ -73,19 +73,19 @@ final class MeetingDetectorTests: XCTestCase {
         let tooEarly = detector.dueAlerts(
             events: [event],
             filter: MeetingFilterSettings(),
-            timing: .fiveMinutesBefore,
+            offsets: [.fiveMinutesBefore],
             now: start.addingTimeInterval(-301)
         )
         let due = detector.dueAlerts(
             events: [event],
             filter: MeetingFilterSettings(),
-            timing: .fiveMinutesBefore,
+            offsets: [.fiveMinutesBefore],
             now: start.addingTimeInterval(-290)
         )
         let tooLate = detector.dueAlerts(
             events: [event],
             filter: MeetingFilterSettings(),
-            timing: .fiveMinutesBefore,
+            offsets: [.fiveMinutesBefore],
             now: start.addingTimeInterval(-254)
         )
 
@@ -94,34 +94,80 @@ final class MeetingDetectorTests: XCTestCase {
         XCTAssertTrue(tooLate.isEmpty)
     }
 
-    func testCurrentActiveMeetingCanTriggerAtStartAfterLaunch() {
+    func testAtStartAlertTriggersWithinLookbackWindow() {
         let now = referenceDate
-        let start = now.addingTimeInterval(-120)
+        let start = now.addingTimeInterval(-30)
         let event = MeetingEvent.fixture(startDate: start, endDate: start.addingTimeInterval(1800))
 
         let due = detector.dueAlerts(
             events: [event],
             filter: MeetingFilterSettings(),
-            timing: .atStart,
+            offsets: [.atStart],
             now: now
         )
 
         XCTAssertEqual(due.map(\.offset), [.atStart])
     }
 
-    func testCurrentActiveMeetingDoesNotTriggerAtStartAfterGraceWindow() {
+    func testAtStartAlertDoesNotTriggerAfterLookbackWindow() {
         let now = referenceDate
-        let start = now.addingTimeInterval(-16 * 60)
+        let start = now.addingTimeInterval(-46)
         let event = MeetingEvent.fixture(startDate: start, endDate: now.addingTimeInterval(1800))
 
         let due = detector.dueAlerts(
             events: [event],
             filter: MeetingFilterSettings(),
-            timing: .atStart,
+            offsets: [.atStart],
             now: now
         )
 
         XCTAssertTrue(due.isEmpty)
+    }
+
+    func testReturnsCustomThirtyMinuteAlertWithinLookbackWindow() throws {
+        let start = referenceDate
+        let offset = try XCTUnwrap(AlertOffset(minutesBefore: 30))
+        let event = MeetingEvent.fixture(startDate: start)
+
+        let due = detector.dueAlerts(
+            events: [event],
+            filter: MeetingFilterSettings(),
+            offsets: [offset],
+            now: start.addingTimeInterval(-1775)
+        )
+
+        XCTAssertEqual(due.map(\.offset), [offset])
+    }
+
+    func testSkipsCustomAlertAfterLookbackWindow() throws {
+        let start = referenceDate
+        let offset = try XCTUnwrap(AlertOffset(minutesBefore: 30))
+        let event = MeetingEvent.fixture(startDate: start)
+
+        let due = detector.dueAlerts(
+            events: [event],
+            filter: MeetingFilterSettings(),
+            offsets: [offset],
+            now: start.addingTimeInterval(-1754)
+        )
+
+        XCTAssertTrue(due.isEmpty)
+    }
+
+    func testDueStaggeredAlertsSortChronologically() throws {
+        let start = referenceDate
+        let thirtyMinutes = try XCTUnwrap(AlertOffset(minutesBefore: 30))
+        let detector = MeetingDetector(dueLookback: 31 * 60)
+        let event = MeetingEvent.fixture(startDate: start)
+
+        let due = detector.dueAlerts(
+            events: [event],
+            filter: MeetingFilterSettings(),
+            offsets: [.fiveMinutesBefore, thirtyMinutes],
+            now: start
+        )
+
+        XCTAssertEqual(due.map(\.offset), [thirtyMinutes, .fiveMinutesBefore])
     }
 
     func testNextMeetingIgnoresCurrentMeeting() {

@@ -61,10 +61,14 @@ final class AppController {
     func start() {
         AppLog.app.info("Shit AppController start")
         menuBarController.start()
+        menuBarController.setVisible(settings.menuBarIconVisible)
         observeSettings()
         latestAuthorization = calendarProvider.authorizationState
         updateMenu()
         launchAtLoginManager.setEnabled(settings.autoLaunchEnabled)
+        if !settings.menuBarIconVisible {
+            settingsWindowController.show()
+        }
 
         Task {
             await requestCalendarAccessIfNeeded()
@@ -108,8 +112,15 @@ final class AppController {
             }
             .store(in: &cancellables)
 
+        settings.$menuBarIconVisible
+            .sink { [weak self] isVisible in
+                self?.menuBarController.setVisible(isVisible)
+            }
+            .store(in: &cancellables)
+
         let refreshPublishers: [AnyPublisher<Void, Never>] = [
-            settings.$alertTiming.map { _ in () }.eraseToAnyPublisher(),
+            settings.$firstAlertMinutes.map { _ in () }.eraseToAnyPublisher(),
+            settings.$secondAlertMinutes.map { _ in () }.eraseToAnyPublisher(),
             settings.$ignoreAllDayEvents.map { _ in () }.eraseToAnyPublisher(),
             settings.$ignoreFreeEvents.map { _ in () }.eraseToAnyPublisher(),
             settings.$ignoreDeclinedEvents.map { _ in () }.eraseToAnyPublisher(),
@@ -153,7 +164,7 @@ final class AppController {
         let filteredEvents = detector.filteredEvents(events: latestEvents, filter: filter, now: now)
         let candidates = detector.dueAlerts(
             filteredEvents: filteredEvents,
-            timing: settings.alertTiming,
+            offsets: settings.alertOffsets,
             now: now
         )
 

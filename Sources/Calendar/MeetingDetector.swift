@@ -57,36 +57,7 @@ struct AlertKey: Hashable {
     let offset: AlertOffset
 }
 
-enum AlertOffset: String, CaseIterable, Hashable {
-    case fiveMinutesBefore
-    case oneMinuteBefore
-    case atStart
-
-    var timeInterval: TimeInterval {
-        switch self {
-        case .fiveMinutesBefore:
-            -300
-        case .oneMinuteBefore:
-            -60
-        case .atStart:
-            0
-        }
-    }
-
-    var label: String {
-        switch self {
-        case .fiveMinutesBefore:
-            "5 minutes before"
-        case .oneMinuteBefore:
-            "1 minute before"
-        case .atStart:
-            "At start"
-        }
-    }
-}
-
 struct MeetingDetector {
-    var activeStartGrace: TimeInterval = 15 * 60
     var dueLookback: TimeInterval = 45
 
     func filteredEvents(
@@ -107,24 +78,24 @@ struct MeetingDetector {
     func dueAlerts(
         events: [MeetingEvent],
         filter: MeetingFilterSettings,
-        timing: AlertTiming,
+        offsets: [AlertOffset],
         now: Date
     ) -> [AlertCandidate] {
         dueAlerts(
             filteredEvents: filteredEvents(events: events, filter: filter, now: now),
-            timing: timing,
+            offsets: offsets,
             now: now
         )
     }
 
     func dueAlerts(
         filteredEvents events: [MeetingEvent],
-        timing: AlertTiming,
+        offsets: [AlertOffset],
         now: Date
     ) -> [AlertCandidate] {
         events
             .flatMap { event in
-                timing.offsets.compactMap { offset -> AlertCandidate? in
+                offsets.compactMap { offset -> AlertCandidate? in
                     let candidate = AlertCandidate(event: event, offset: offset)
                     return isDue(candidate, now: now) ? candidate : nil
                 }
@@ -143,13 +114,6 @@ struct MeetingDetector {
     }
 
     private func isDue(_ candidate: AlertCandidate, now: Date) -> Bool {
-        if candidate.offset == .atStart,
-           candidate.event.isActive(at: now),
-           now.timeIntervalSince(candidate.event.startDate) <= activeStartGrace
-        {
-            return true
-        }
-
         let triggerDate = candidate.triggerDate
         guard now >= triggerDate else { return false }
         guard now <= candidate.event.endDate else { return false }
