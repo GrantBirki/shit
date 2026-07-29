@@ -51,6 +51,7 @@ fi
 
 grep -q "branches:" "$RELEASE_WORKFLOW" || fail "release workflow must restrict its branch"
 grep -q -- "- main" "$RELEASE_WORKFLOW" || fail "release workflow must target main"
+grep -Fq "github.workflow_sha == github.sha" "$RELEASE_WORKFLOW" || fail "release workflow must come from the exact commit being released"
 if grep -q "workflow_dispatch:" "$RELEASE_WORKFLOW"; then
   fail "release workflow must not have a manual dispatch path"
 fi
