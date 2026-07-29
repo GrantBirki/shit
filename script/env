@@ -14,6 +14,13 @@ export YELLOW='\033[0;33m'
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && cd .. && pwd )"
 export DIR
 
+# Keep checksum-pinned project tools isolated from the global Homebrew
+# installation and available to every repository script.
+TOOLS_ROOT="$DIR/.tmp/tools"
+TOOLS_BIN="$TOOLS_ROOT/bin"
+export TOOLS_ROOT TOOLS_BIN
+export PATH="$TOOLS_BIN:$PATH"
+
 # The name of the repository is the name of the directory (usually)
 REPO_NAME=$(basename "$PWD")
 export REPO_NAME
