@@ -60,7 +60,7 @@ You can also verify the checksum:
 shasum -a 256 Shit.zip
 ```
 
-## Unsigned Builds
+## Unsigned Releases
 
 Shit releases are currently unsigned. macOS Gatekeeper may block the first launch.
 
@@ -68,11 +68,8 @@ To open it:
 
 1. Right-click `Shit.app` and choose Open.
 2. Or go to System Settings -> Privacy & Security and click Open Anyway.
-3. If neither shows, remove the quarantine attribute:
 
-```bash
-xattr -dr com.apple.quarantine /Applications/Shit.app
-```
+The release and Homebrew installation paths preserve quarantine. Do not remove the quarantine attribute to bypass Gatekeeper.
 
 ## Contributing
 

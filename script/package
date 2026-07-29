@@ -87,12 +87,12 @@ if [[ -n "$CODESIGN_IDENTITY" ]]; then
     codesign_args+=(--entitlements "$ENTITLEMENTS_PATH")
   fi
   codesign "${codesign_args[@]}" "$STAGING_APP"
-  codesign --verify --strict "$STAGING_APP"
 else
   echo -e "${BLUE}Ad-hoc signing ${APP_NAME}.app...${OFF}"
   codesign --force --deep --sign - "$STAGING_APP"
-  codesign --verify --strict "$STAGING_APP"
 fi
+
+codesign --verify --deep --strict "$STAGING_APP"
 
 if [[ -n "$NOTARY_PROFILE" ]]; then
   require_tool xcrun "xcrun not found."
@@ -100,6 +100,7 @@ if [[ -n "$NOTARY_PROFILE" ]]; then
   ditto -c -k --sequesterRsrc --keepParent "$STAGING_APP" "$NOTARY_ZIP"
   xcrun notarytool submit "$NOTARY_ZIP" --wait --keychain-profile "$NOTARY_PROFILE"
   xcrun stapler staple "$STAGING_APP"
+  codesign --verify --deep --strict "$STAGING_APP"
 fi
 
 rm -f "$ZIP_PATH"
