@@ -82,8 +82,13 @@ ensure_full_xcode() {
     exit 1
   fi
 
-  local xcode_version sdk_version
-  xcode_version="$(xcodebuild -version | awk '/^Xcode / {print $2; exit}')"
+  local xcode_output xcode_version sdk_version
+  if ! xcode_output="$(xcodebuild -version 2>&1)"; then
+    echo -e "${RED}Unable to read the selected Xcode version.${OFF}"
+    echo "$xcode_output"
+    exit 1
+  fi
+  xcode_version="$(awk '/^Xcode / {print $2; exit}' <<< "$xcode_output")"
   sdk_version="$(xcrun --sdk macosx --show-sdk-version)"
   if [[ "$xcode_version" != 26.* || "$sdk_version" != 26.* ]]; then
     echo -e "${RED}Xcode 26.x and the macOS 26 SDK are required.${OFF}"
