@@ -14,21 +14,34 @@ fail() {
   exit 1
 }
 
-extract_action_use() {
-  local action_line="${1%%#*}"
-  action_line="${action_line#"${action_line%%[![:space:]]*}"}"
-  if [[ "$action_line" == -* ]]; then
-    action_line="${action_line#-}"
-    action_line="${action_line#"${action_line%%[![:space:]]*}"}"
+extract_yaml_value() {
+  local expected_key="$1"
+  local yaml_line="${2%%#*}"
+  yaml_line="${yaml_line#"${yaml_line%%[![:space:]]*}"}"
+  if [[ "$yaml_line" == -* ]]; then
+    yaml_line="${yaml_line#-}"
+    yaml_line="${yaml_line#"${yaml_line%%[![:space:]]*}"}"
   fi
 
-  local action_key="${action_line%%:*}"
-  [[ "$action_key" != "$action_line" ]] || return 1
-  action_key=$(printf '%s' "$action_key" | tr -d "[:space:]\"'")
-  [[ "$action_key" == "uses" ]] || return 1
+  local yaml_key="${yaml_line%%:*}"
+  [[ "$yaml_key" != "$yaml_line" ]] || return 1
+  yaml_key=$(printf '%s' "$yaml_key" | tr -d "[:space:]\"'")
+  [[ "$yaml_key" == "$expected_key" ]] || return 1
 
-  local action_value="${action_line#*:}"
-  printf '%s' "$action_value" | tr -d "[:space:]\"'"
+  local yaml_value="${yaml_line#*:}"
+  yaml_value="${yaml_value#"${yaml_value%%[![:space:]]*}"}"
+  yaml_value="${yaml_value%"${yaml_value##*[![:space:]]}"}"
+  case "$yaml_value" in
+    \"*\") yaml_value="${yaml_value#\"}"; yaml_value="${yaml_value%\"}" ;;
+    \'*\') yaml_value="${yaml_value#\'}"; yaml_value="${yaml_value%\'}" ;;
+  esac
+  printf '%s' "$yaml_value"
+}
+
+extract_action_use() {
+  local action_use
+  action_use=$(extract_yaml_value "uses" "$1") || return 1
+  printf '%s' "$action_use" | tr -d "[:space:]"
 }
 
 check_action_parser() {
@@ -36,6 +49,142 @@ check_action_parser() {
   [[ "$1" =~ $ACTION_USES_PATTERN ]] || fail "action matcher rejected regression fixture"
   parsed=$(extract_action_use "$1") || fail "action parser rejected regression fixture"
   [[ "$parsed" == "$2" ]] || fail "action parser accepted a uses value from a YAML comment"
+}
+
+validate_step() {
+  local workflow_path="$1"
+  local step_index="$2"
+  local step_indent="$3"
+  local step_content="$4"
+  local action_use=""
+  local action_line=""
+  local step_name=""
+  local persist_credentials=""
+  local checkout_ref=""
+  local fetch_depth=""
+  local fence_mode=""
+  local github_artifacts=""
+  local in_with=false
+  local with_indent=$((step_indent + 2))
+  local input_indent=$((step_indent + 4))
+  local line trimmed indent value direct_key canonical_action
+
+  while IFS= read -r line; do
+    trimmed="${line#"${line%%[![:space:]]*}"}"
+    indent=$((${#line} - ${#trimmed}))
+
+    if [[ "$in_with" == true && -n "$trimmed" && "$indent" -le "$with_indent" ]]; then
+      in_with=false
+    fi
+
+    direct_key=false
+    if { [[ "$indent" -eq "$step_indent" ]] && [[ "$trimmed" == -* ]]; } || [[ "$indent" -eq $((step_indent + 2)) ]]; then
+      direct_key=true
+    fi
+
+    if value=$(extract_yaml_value "uses" "$line"); then
+      [[ "$direct_key" == true ]] || fail "uses must be a direct step key: $workflow_path"
+      [[ -z "$action_use" ]] || fail "workflow step has multiple uses keys: $workflow_path"
+      action_use=$(printf '%s' "$value" | tr -d "[:space:]")
+      action_line="$line"
+    fi
+
+    if value=$(extract_yaml_value "name" "$line"); then
+      if [[ "$direct_key" == true ]]; then
+        [[ -z "$step_name" ]] || fail "workflow step has multiple names: $workflow_path"
+        step_name="$value"
+      fi
+    fi
+
+    if extract_yaml_value "with" "$line" >/dev/null && [[ "$indent" -eq "$with_indent" ]]; then
+      in_with=true
+      continue
+    fi
+
+    if [[ "$in_with" == true && "$indent" -eq "$input_indent" ]]; then
+      if value=$(extract_yaml_value "persist-credentials" "$line"); then
+        persist_credentials="$value"
+      elif value=$(extract_yaml_value "ref" "$line"); then
+        checkout_ref="$value"
+      elif value=$(extract_yaml_value "fetch-depth" "$line"); then
+        fetch_depth="$value"
+      elif value=$(extract_yaml_value "mode" "$line"); then
+        fence_mode="$value"
+      elif value=$(extract_yaml_value "allow_github_artifacts" "$line"); then
+        github_artifacts="$value"
+      fi
+    fi
+  done <<< "$step_content"
+
+  case "$action_use" in
+    actions/checkout@*)
+      [[ "$persist_credentials" == "false" ]] || fail "checkout must disable persisted credentials in its own step: $workflow_path"
+      if [[ "$workflow_path" == ".github/workflows/release.yml" ]]; then
+        [[ "$checkout_ref" == '${{ github.sha }}' ]] || fail "release checkout must use the exact event commit"
+        [[ "$fetch_depth" == "1" ]] || fail "release checkout must use fetch depth 1"
+      fi
+      ;;
+    openai/fence@*)
+      [[ "$step_name" == "fence" ]] || fail "Fence step must be named fence: $workflow_path"
+      [[ "$step_index" -eq 1 ]] || fail "Fence must be the first meaningful step: $workflow_path"
+      canonical_action="${action_line#"${action_line%%[![:space:]]*}"}"
+      if [[ "$canonical_action" == -* ]]; then
+        canonical_action="${canonical_action#-}"
+        canonical_action="${canonical_action#"${canonical_action%%[![:space:]]*}"}"
+      fi
+      [[ "$canonical_action" == "uses: $FENCE_USE" ]] || fail "Fence must use the verified v0.9.2 distribution pin: $workflow_path"
+      if [[ "$fence_mode" == "audit" && "$github_artifacts" == "true" ]]; then
+        fail "Fence audit mode cannot enable GitHub artifact egress: $workflow_path"
+      fi
+      ;;
+  esac
+}
+
+validate_workflow_steps() {
+  local workflow_path="$1"
+  local in_steps=false
+  local steps_indent=-1
+  local step_indent=-1
+  local step_index=0
+  local step_content=""
+  local line trimmed indent steps_value
+
+  while IFS= read -r line; do
+    trimmed="${line#"${line%%[![:space:]]*}"}"
+    indent=$((${#line} - ${#trimmed}))
+
+    if steps_value=$(extract_yaml_value "steps" "$line") && [[ -z "$steps_value" ]]; then
+      in_steps=true
+      steps_indent="$indent"
+      step_indent=-1
+      step_index=0
+      step_content=""
+      continue
+    fi
+
+    if [[ "$in_steps" == true && -n "$trimmed" && "$indent" -le "$steps_indent" ]]; then
+      if [[ -n "$step_content" ]]; then
+        validate_step "$workflow_path" "$step_index" "$step_indent" "$step_content"
+      fi
+      in_steps=false
+      step_content=""
+    fi
+
+    if [[ "$in_steps" == true && "$trimmed" == "- "* && "$indent" -eq $((steps_indent + 2)) ]]; then
+      if [[ -n "$step_content" ]]; then
+        validate_step "$workflow_path" "$step_index" "$step_indent" "$step_content"
+      fi
+      step_indent="$indent"
+      step_index=$((step_index + 1))
+      step_content="$line"
+    elif [[ "$in_steps" == true && "$step_index" -gt 0 ]]; then
+      step_content+=$'\n'"$line"
+    fi
+  done
+
+  if [[ "$in_steps" == true && -n "$step_content" ]]; then
+    validate_step "$workflow_path" "$step_index" "$step_indent" "$step_content"
+  fi
 }
 
 if grep -R -n -E '^[[:space:]]*pull_request_target:' "$WORKFLOW_DIR" >/dev/null; then
@@ -74,67 +223,33 @@ check_action_parser '- uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447
 check_action_parser '"uses": "actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd"' 'actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd'
 check_action_parser "'uses': 'attacker/action@main' # uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd" 'attacker/action@main'
 
+unsafe_checkout_fixture=$'jobs:\n  test:\n    steps:\n      - "uses": "actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd"\n      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd\n        with:\n          persist-credentials: false'
+if (validate_workflow_steps "unsafe checkout fixture" <<< "$unsafe_checkout_fixture") >/dev/null 2>&1; then
+  fail "step parser accepted an unsafe checkout followed by a safe checkout"
+fi
+
+spoofed_fence_fixture=$'jobs:\n  test:\n    steps:\n      - name: restrict network # name: fence\n        uses: openai/fence@2cf00d32716021a106bb59fcdc1c978c22a3def3 # pin@v0.9.2\n        with:\n          mode: audit'
+if (validate_workflow_steps "spoofed Fence fixture" <<< "$spoofed_fence_fixture") >/dev/null 2>&1; then
+  fail "step parser accepted a spoofed Fence step name"
+fi
+
 for workflow in "$WORKFLOW_DIR"/*.yml "$WORKFLOW_DIR"/*.yaml; do
   [[ -e "$workflow" ]] || continue
   workflow_path="${workflow#"$ROOT_DIR/"}"
-  previous_line=""
-
-  while IFS= read -r line; do
-    if [[ "$line" == *"uses: openai/fence@"* ]]; then
-      step_name="${previous_line#"${previous_line%%[![:space:]]*}"}"
-      fence_use="${line#"${line%%[![:space:]]*}"}"
-      [[ "$step_name" == "- name: fence" ]] || fail "Fence step must be named fence: $workflow_path"
-      [[ "$fence_use" == "uses: $FENCE_USE" ]] || fail "Fence must use the verified v0.9.2 distribution pin: $workflow_path"
-    fi
-    previous_line="$line"
-  done < "$workflow"
-
-  if ! awk '
-    function check_fence_step() {
-      if (in_fence && audit_mode && github_artifacts) {
-        exit 1
-      }
-    }
-
-    /^[[:space:]]*-[[:space:]]/ {
-      check_fence_step()
-      in_fence = 0
-      audit_mode = 0
-      github_artifacts = 0
-    }
-
-    /uses:[[:space:]]*openai\/fence@/ {
-      in_fence = 1
-    }
-
-    in_fence && /^[[:space:]]*mode:[[:space:]]*audit[[:space:]]*$/ {
-      audit_mode = 1
-    }
-
-    in_fence && /^[[:space:]]*allow_github_artifacts:[[:space:]]*true[[:space:]]*$/ {
-      github_artifacts = 1
-    }
-
-    END {
-      check_fence_step()
-    }
-  ' "$workflow"; then
-    fail "Fence audit mode cannot enable GitHub artifact egress: $workflow_path"
-  fi
+  validate_workflow_steps "$workflow_path" < "$workflow"
 done
-
-checkout_count=$(grep -R -h -E 'uses:[[:space:]]*actions/checkout@' "$WORKFLOW_DIR" | wc -l | tr -d ' ')
-nonpersisted_count=$(grep -R -h -E '^[[:space:]]+persist-credentials:[[:space:]]*false[[:space:]]*$' "$WORKFLOW_DIR" | wc -l | tr -d ' ')
-if [[ "$checkout_count" != "$nonpersisted_count" ]]; then
-  fail "every checkout must set persist-credentials: false"
-fi
 
 grep -q "branches:" "$RELEASE_WORKFLOW" || fail "release workflow must restrict its branch"
 grep -q -- "- main" "$RELEASE_WORKFLOW" || fail "release workflow must target main"
 grep -Fq "github.workflow_sha == github.sha" "$RELEASE_WORKFLOW" || fail "release workflow must come from the exact commit being released"
-[[ "$(grep -c -E 'uses:[[:space:]]*actions/checkout@' "$RELEASE_WORKFLOW")" == "1" ]] || fail "release workflow must have exactly one checkout"
-grep -Fq 'ref: ${{ github.sha }}' "$RELEASE_WORKFLOW" || fail "release checkout must use the exact event commit"
-grep -Eq '^[[:space:]]+fetch-depth:[[:space:]]*1[[:space:]]*$' "$RELEASE_WORKFLOW" || fail "release checkout must use fetch depth 1"
+release_checkout_count=0
+while IFS= read -r uses_line; do
+  uses=$(extract_action_use "$uses_line")
+  if [[ "$uses" == actions/checkout@* ]]; then
+    release_checkout_count=$((release_checkout_count + 1))
+  fi
+done < <(grep -E "$ACTION_USES_PATTERN" "$RELEASE_WORKFLOW")
+[[ "$release_checkout_count" == "1" ]] || fail "release workflow must have exactly one checkout"
 grep -Fq 'actual_sha=$(git rev-parse HEAD)' "$RELEASE_WORKFLOW" || fail "release workflow must resolve the checked-out commit"
 grep -Fq 'if [[ "$actual_sha" != "$GITHUB_SHA" ]]; then' "$RELEASE_WORKFLOW" || fail "release workflow must verify the checked-out commit"
 grep -Fxq "    if: $RELEASE_INFO_IF" "$RELEASE_WORKFLOW" || fail "release info must require a successful build and release"
