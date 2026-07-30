@@ -321,6 +321,25 @@ done < <(grep -E "$ACTION_USES_PATTERN" "$RELEASE_WORKFLOW")
 grep -Fq 'actual_sha=$(git rev-parse HEAD)' "$RELEASE_WORKFLOW" || fail "release workflow must resolve the checked-out commit"
 grep -Fq 'if [[ "$actual_sha" != "$GITHUB_SHA" ]]; then' "$RELEASE_WORKFLOW" || fail "release workflow must verify the checked-out commit"
 grep -Fxq "    if: $RELEASE_INFO_IF" "$RELEASE_WORKFLOW" || fail "release info must require a successful build and release"
+
+finalize_job=$(awk '
+  /^  finalize:$/ { in_job = 1 }
+  in_job && /^  [A-Za-z0-9_-]+:$/ && $0 != "  finalize:" { exit }
+  in_job { print }
+' "$RELEASE_WORKFLOW")
+[[ -n "$finalize_job" ]] || fail "release workflow must have a finalize job"
+grep -Fq '    environment: apple-signing' <<< "$finalize_job" || fail "finalize job must use the protected apple-signing environment"
+grep -Fq '    runs-on: macos-26' <<< "$finalize_job" || fail "finalize job must use the pinned macOS runner label"
+grep -Fq '    permissions: {}' <<< "$finalize_job" || fail "finalize job must not receive a GitHub token"
+if grep -q 'actions/checkout@' <<< "$finalize_job"; then
+  fail "finalize job must not check out repository code"
+fi
+if grep -q -E 'run:[[:space:]]+script/|^[[:space:]]+script/' <<< "$finalize_job"; then
+  fail "finalize job must not execute repository scripts"
+fi
+[[ "$(grep -Fc 'artifact-ids: ${{ needs.build.outputs.artifact-id }}' "$RELEASE_WORKFLOW")" == "1" ]] || fail "only finalize may download the unnotarized build artifact"
+[[ "$(grep -Fc 'artifact-ids: ${{ needs.finalize.outputs.artifact-id }}' "$RELEASE_WORKFLOW")" == "4" ]] || fail "all downstream jobs must download the finalized artifact by ID"
+grep -Fq 'artifact-id: ${{ steps.upload-artifact.outputs.artifact-id }}' <<< "$finalize_job" || fail "finalize job must export its artifact ID"
 grep -Fq 'bundle-artifact-id: ${{ steps.upload-attestation.outputs.artifact-id }}' "$RELEASE_WORKFLOW" || fail "attestation job must export the bundle artifact ID"
 grep -Fq 'artifact-ids: ${{ needs.attest.outputs.bundle-artifact-id }}' "$RELEASE_WORKFLOW" || fail "verification job must download the exact attestation bundle artifact"
 grep -Fq 'path: ${{ steps.attest.outputs.bundle-path }}' "$RELEASE_WORKFLOW" || fail "attestation job must upload the exact generated bundle"
