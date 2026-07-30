@@ -56,6 +56,7 @@ validate_step() {
   local step_index="$2"
   local step_indent="$3"
   local step_content="$4"
+  local job_id="$5"
   local action_use=""
   local action_line=""
   local step_name=""
@@ -64,14 +65,29 @@ validate_step() {
   local fetch_depth=""
   local fence_mode=""
   local github_artifacts=""
+  local fence_allowlist=""
+  local fence_input_keys=""
   local in_with=false
+  local in_allowlist=false
   local with_indent=$((step_indent + 2))
   local input_indent=$((step_indent + 4))
-  local line trimmed indent value direct_key canonical_action
+  local line trimmed indent value direct_key canonical_action input_key
+  local expected_fence_inputs expected_fence_allowlist
 
   while IFS= read -r line; do
     trimmed="${line#"${line%%[![:space:]]*}"}"
     indent=$((${#line} - ${#trimmed}))
+
+    if [[ "$in_allowlist" == true ]]; then
+      if [[ -z "$trimmed" ]]; then
+        continue
+      elif [[ "$indent" -gt "$input_indent" ]]; then
+        fence_allowlist+="${fence_allowlist:+$'\n'}$trimmed"
+        continue
+      else
+        in_allowlist=false
+      fi
+    fi
 
     if [[ "$in_with" == true && -n "$trimmed" && "$indent" -le "$with_indent" ]]; then
       in_with=false
@@ -102,6 +118,10 @@ validate_step() {
     fi
 
     if [[ "$in_with" == true && "$indent" -eq "$input_indent" ]]; then
+      input_key="${trimmed%%:*}"
+      input_key=$(printf '%s' "$input_key" | tr -d "[:space:]\"'")
+      fence_input_keys+="${fence_input_keys:+$'\n'}$input_key"
+
       if value=$(extract_yaml_value "persist-credentials" "$line"); then
         persist_credentials="$value"
       elif value=$(extract_yaml_value "ref" "$line"); then
@@ -112,6 +132,9 @@ validate_step() {
         fence_mode="$value"
       elif value=$(extract_yaml_value "allow_github_artifacts" "$line"); then
         github_artifacts="$value"
+      elif value=$(extract_yaml_value "allowlist" "$line"); then
+        [[ "$value" == "|" ]] || fail "Fence allowlist must use a literal block: $workflow_path"
+        in_allowlist=true
       fi
     fi
   done <<< "$step_content"
@@ -133,9 +156,34 @@ validate_step() {
         canonical_action="${canonical_action#"${canonical_action%%[![:space:]]*}"}"
       fi
       [[ "$canonical_action" == "uses: $FENCE_USE" ]] || fail "Fence must use the verified v0.10.0 distribution pin: $workflow_path"
-      if [[ "$fence_mode" == "audit" && "$github_artifacts" == "true" ]]; then
-        fail "Fence audit mode cannot enable GitHub artifact egress: $workflow_path"
-      fi
+      [[ "$workflow_path" == ".github/workflows/release.yml" ]] || fail "Fence is only expected in the release workflow"
+      [[ -z "$fence_mode" ]] || fail "Fence must use default standard block mode: $workflow_path"
+      [[ "$github_artifacts" == "true" ]] || fail "Fence must explicitly allow required GitHub artifact access: $workflow_path"
+
+      case "$job_id" in
+        attest)
+          expected_fence_inputs=$'allow_github_artifacts\nallowlist'
+          expected_fence_allowlist=$'fulcio.sigstore.dev\nrekor.sigstore.dev'
+          ;;
+        verify)
+          expected_fence_inputs=$'allow_github_artifacts\nallowlist'
+          expected_fence_allowlist=$'tuf-repo-cdn.sigstore.dev\ntuf-repo.github.com'
+          ;;
+        release)
+          expected_fence_inputs=$'allow_github_artifacts\nallowlist'
+          expected_fence_allowlist='uploads.github.com'
+          ;;
+        release_info)
+          expected_fence_inputs='allow_github_artifacts'
+          expected_fence_allowlist=''
+          ;;
+        *)
+          fail "Fence is not expected in job $job_id: $workflow_path"
+          ;;
+      esac
+
+      [[ "$fence_input_keys" == "$expected_fence_inputs" ]] || fail "Fence inputs do not match the required block policy for $job_id: $workflow_path"
+      [[ "$fence_allowlist" == "$expected_fence_allowlist" ]] || fail "Fence allowlist does not match the required block policy for $job_id: $workflow_path"
       ;;
   esac
 }
@@ -147,11 +195,24 @@ validate_workflow_steps() {
   local step_indent=-1
   local step_index=0
   local step_content=""
+  local job_id=""
   local line trimmed indent steps_value
 
   while IFS= read -r line; do
     trimmed="${line#"${line%%[![:space:]]*}"}"
     indent=$((${#line} - ${#trimmed}))
+
+    if [[ "$in_steps" == true && -n "$trimmed" && "$indent" -le "$steps_indent" ]]; then
+      if [[ -n "$step_content" ]]; then
+        validate_step "$workflow_path" "$step_index" "$step_indent" "$step_content" "$job_id"
+      fi
+      in_steps=false
+      step_content=""
+    fi
+
+    if [[ "$indent" -eq 2 && "$trimmed" =~ ^([A-Za-z0-9_-]+):[[:space:]]*$ ]]; then
+      job_id="${BASH_REMATCH[1]}"
+    fi
 
     if steps_value=$(extract_yaml_value "steps" "$line") && [[ -z "$steps_value" ]]; then
       in_steps=true
@@ -162,17 +223,9 @@ validate_workflow_steps() {
       continue
     fi
 
-    if [[ "$in_steps" == true && -n "$trimmed" && "$indent" -le "$steps_indent" ]]; then
-      if [[ -n "$step_content" ]]; then
-        validate_step "$workflow_path" "$step_index" "$step_indent" "$step_content"
-      fi
-      in_steps=false
-      step_content=""
-    fi
-
     if [[ "$in_steps" == true && "$trimmed" == "- "* && "$indent" -eq $((steps_indent + 2)) ]]; then
       if [[ -n "$step_content" ]]; then
-        validate_step "$workflow_path" "$step_index" "$step_indent" "$step_content"
+        validate_step "$workflow_path" "$step_index" "$step_indent" "$step_content" "$job_id"
       fi
       step_indent="$indent"
       step_index=$((step_index + 1))
@@ -183,7 +236,7 @@ validate_workflow_steps() {
   done
 
   if [[ "$in_steps" == true && -n "$step_content" ]]; then
-    validate_step "$workflow_path" "$step_index" "$step_indent" "$step_content"
+    validate_step "$workflow_path" "$step_index" "$step_indent" "$step_content" "$job_id"
   fi
 }
 
@@ -228,7 +281,22 @@ if (validate_workflow_steps "unsafe checkout fixture" <<< "$unsafe_checkout_fixt
   fail "step parser accepted an unsafe checkout followed by a safe checkout"
 fi
 
-spoofed_fence_fixture=$'jobs:\n  test:\n    steps:\n      - name: restrict network # name: fence\n        uses: openai/fence@e6b39c80c51cb2b2a39448ddeff74b3b886c0a63 # pin@v0.10.0\n        with:\n          mode: audit'
+valid_fence_fixture=$'jobs:\n  attest:\n    steps:\n      - name: fence\n        uses: openai/fence@e6b39c80c51cb2b2a39448ddeff74b3b886c0a63 # pin@v0.10.0\n        with:\n          allow_github_artifacts: true\n          allowlist: |\n            fulcio.sigstore.dev\n            rekor.sigstore.dev'
+if ! (validate_workflow_steps ".github/workflows/release.yml" <<< "$valid_fence_fixture") >/dev/null 2>&1; then
+  fail "step parser rejected the required Fence block policy"
+fi
+
+audit_fence_fixture=$'jobs:\n  attest:\n    steps:\n      - name: fence\n        uses: openai/fence@e6b39c80c51cb2b2a39448ddeff74b3b886c0a63 # pin@v0.10.0\n        with:\n          mode: audit\n          allow_github_artifacts: true\n          allowlist: |\n            fulcio.sigstore.dev\n            rekor.sigstore.dev'
+if (validate_workflow_steps ".github/workflows/release.yml" <<< "$audit_fence_fixture") >/dev/null 2>&1; then
+  fail "step parser accepted Fence audit mode"
+fi
+
+broadened_fence_fixture=$'jobs:\n  attest:\n    steps:\n      - name: fence\n        uses: openai/fence@e6b39c80c51cb2b2a39448ddeff74b3b886c0a63 # pin@v0.10.0\n        with:\n          allow_github_artifacts: true\n          allowlist: |\n            api.github.com\n            fulcio.sigstore.dev\n            rekor.sigstore.dev'
+if (validate_workflow_steps ".github/workflows/release.yml" <<< "$broadened_fence_fixture") >/dev/null 2>&1; then
+  fail "step parser accepted a broadened Fence allowlist"
+fi
+
+spoofed_fence_fixture=$'jobs:\n  attest:\n    steps:\n      - name: restrict network # name: fence\n        uses: openai/fence@e6b39c80c51cb2b2a39448ddeff74b3b886c0a63 # pin@v0.10.0\n        with:\n          allow_github_artifacts: true\n          allowlist: |\n            fulcio.sigstore.dev\n            rekor.sigstore.dev'
 if (validate_workflow_steps "spoofed Fence fixture" <<< "$spoofed_fence_fixture") >/dev/null 2>&1; then
   fail "step parser accepted a spoofed Fence step name"
 fi
