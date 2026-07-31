@@ -60,16 +60,11 @@ You can also verify the checksum:
 shasum -a 256 Shit.zip
 ```
 
-## Unsigned Releases
+## Signing and Gatekeeper
 
-Shit releases are currently unsigned. macOS Gatekeeper may block the first launch.
+Official GitHub release archives contain a Developer ID-signed and Apple-notarized application with a stapled notarization ticket. The protected release job verifies the unsigned build artifact before it receives signing credentials, performs signing and notarization without checking out repository code, and publishes only the finalized archive.
 
-To open it:
-
-1. Right-click `Shit.app` and choose Open.
-2. Or go to System Settings -> Privacy & Security and click Open Anyway.
-
-The release and Homebrew installation paths preserve quarantine. Do not remove the quarantine attribute to bypass Gatekeeper.
+Local builds created without maintainer credentials use an ad-hoc signature, which verifies bundle integrity but is not trusted by Gatekeeper. If Gatekeeper blocks an official release, do not disable Gatekeeper or clear quarantine; verify the release checksum and provenance, then report the failure.
 
 ## Contributing
 
