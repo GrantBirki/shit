@@ -157,11 +157,25 @@ jobs:
             exit 1
           fi
 
-          entitlements=$(codesign -d --entitlements :- "$app_path" 2>/dev/null || true)
-          if [[ "$entitlements" == *"com.apple.security.get-task-allow"* ]]; then
-            echo "Release application must not contain get-task-allow."
+          entitlements_path="$staging_dir/entitlements.plist"
+          remaining_entitlements_path="$staging_dir/remaining-entitlements.plist"
+          if ! codesign -d --entitlements :- "$app_path" > "$entitlements_path" 2>/dev/null; then
+            echo "Unable to read application entitlements."
             exit 1
           fi
+          calendar_access=$(/usr/libexec/PlistBuddy -c 'Print :com.apple.security.personal-information.calendars' "$entitlements_path" 2>/dev/null || true)
+          if [[ "$calendar_access" != "true" ]]; then
+            echo "Release application must include Calendar access."
+            exit 1
+          fi
+          cp "$entitlements_path" "$remaining_entitlements_path"
+          /usr/libexec/PlistBuddy -c 'Delete :com.apple.security.personal-information.calendars' "$remaining_entitlements_path"
+          if [[ "$(plutil -convert json -o - "$remaining_entitlements_path")" != "{}" ]]; then
+            echo "Release application contains unexpected entitlements."
+            exit 1
+          fi
+          rm -f "$remaining_entitlements_path"
+          chmod 0444 "$entitlements_path"
 
           plist_path="$app_path/Contents/Info.plist"
           bundle_identifier=$(plutil -extract CFBundleIdentifier raw -o - "$plist_path")
@@ -220,6 +234,7 @@ jobs:
           fi
 
           app_path="$RUNNER_TEMP/shit-finalize/Shit.app"
+          entitlements_path="$RUNNER_TEMP/shit-finalize/entitlements.plist"
           certificate_path="$RUNNER_TEMP/developer-id.p12"
           notary_key_path="$RUNNER_TEMP/AuthKey_${APPLE_NOTARY_KEY_ID}.p8"
           keychain_path="$RUNNER_TEMP/shit-signing.keychain-db"
@@ -285,6 +300,7 @@ jobs:
             --force \
             --options runtime \
             --timestamp \
+            --entitlements "$entitlements_path" \
             --keychain "$keychain_path" \
             --sign "$identity_hash" \
             "$app_path"
@@ -308,9 +324,21 @@ jobs:
             exit 1
           fi
 
-          entitlements=$(codesign -d --entitlements :- "$app_path" 2>/dev/null || true)
-          if [[ "$entitlements" == *"com.apple.security.get-task-allow"* ]]; then
-            echo "Release application must not contain get-task-allow."
+          signed_entitlements_path="$RUNNER_TEMP/shit-finalize/signed-entitlements.plist"
+          remaining_entitlements_path="$RUNNER_TEMP/shit-finalize/remaining-signed-entitlements.plist"
+          if ! codesign -d --entitlements :- "$app_path" > "$signed_entitlements_path" 2>/dev/null; then
+            echo "Unable to read signed application entitlements."
+            exit 1
+          fi
+          calendar_access=$(/usr/libexec/PlistBuddy -c 'Print :com.apple.security.personal-information.calendars' "$signed_entitlements_path" 2>/dev/null || true)
+          if [[ "$calendar_access" != "true" ]]; then
+            echo "Signed application must include Calendar access."
+            exit 1
+          fi
+          cp "$signed_entitlements_path" "$remaining_entitlements_path"
+          /usr/libexec/PlistBuddy -c 'Delete :com.apple.security.personal-information.calendars' "$remaining_entitlements_path"
+          if [[ "$(plutil -convert json -o - "$remaining_entitlements_path")" != "{}" ]]; then
+            echo "Signed application contains unexpected entitlements."
             exit 1
           fi
 

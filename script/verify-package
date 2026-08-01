@@ -70,9 +70,21 @@ if [[ "$signature_details" != *"flags="*"runtime"* ]]; then
   exit 1
 fi
 
-entitlements="$(codesign -d --entitlements :- "$APP_PATH" 2>/dev/null || true)"
-if [[ "$entitlements" == *"com.apple.security.get-task-allow"* ]]; then
-  echo -e "${RED}Release application must not contain get-task-allow.${OFF}"
+ENTITLEMENTS_PATH="$VERIFY_DIR/entitlements.plist"
+REMAINING_ENTITLEMENTS_PATH="$VERIFY_DIR/remaining-entitlements.plist"
+if ! codesign -d --entitlements :- "$APP_PATH" > "$ENTITLEMENTS_PATH" 2>/dev/null; then
+  echo -e "${RED}Unable to read application entitlements.${OFF}"
+  exit 1
+fi
+calendar_access="$(/usr/libexec/PlistBuddy -c 'Print :com.apple.security.personal-information.calendars' "$ENTITLEMENTS_PATH" 2>/dev/null || true)"
+if [[ "$calendar_access" != "true" ]]; then
+  echo -e "${RED}Release application must include Calendar access.${OFF}"
+  exit 1
+fi
+cp "$ENTITLEMENTS_PATH" "$REMAINING_ENTITLEMENTS_PATH"
+/usr/libexec/PlistBuddy -c 'Delete :com.apple.security.personal-information.calendars' "$REMAINING_ENTITLEMENTS_PATH"
+if [[ "$(plutil -convert json -o - "$REMAINING_ENTITLEMENTS_PATH")" != "{}" ]]; then
+  echo -e "${RED}Release application contains unexpected entitlements.${OFF}"
   exit 1
 fi
 
