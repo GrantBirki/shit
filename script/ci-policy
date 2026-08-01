@@ -370,11 +370,14 @@ for command in \
   'security create-keychain' \
   'security list-keychains -d user -s' \
   'codesign \' \
+  '--entitlements "$entitlements_path"' \
   'xcrun notarytool submit' \
   'xcrun stapler staple' \
   'spctl --assess --type execute'; do
   grep -Fq -- "$command" <<< "$signing_step" || fail "signing step is missing a required phase: $command"
 done
+
+grep -Fq 'com.apple.security.personal-information.calendars' <<< "$finalize_job" || fail "finalize job must require Calendar access and reject unexpected entitlements"
 
 grep -Fq 'bundle-artifact-id: ${{ steps.upload-attestation.outputs.artifact-id }}' "$RELEASE_WORKFLOW" || fail "attestation job must export the bundle artifact ID"
 grep -Fq 'artifact-ids: ${{ needs.attest.outputs.bundle-artifact-id }}' "$RELEASE_WORKFLOW" || fail "verification job must download the exact attestation bundle artifact"
