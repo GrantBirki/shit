@@ -7,7 +7,6 @@ WORKFLOW_DIR="$ROOT_DIR/.github/workflows"
 RELEASE_WORKFLOW="$WORKFLOW_DIR/release.yml"
 FENCE_USE="openai/fence@e6b39c80c51cb2b2a39448ddeff74b3b886c0a63 # pin@v0.10.0"
 ACTION_USES_PATTERN="^[[:space:]]*(-[[:space:]]+)?(uses|\"uses\"|'uses')[[:space:]]*:"
-RELEASE_INFO_IF="\${{ always() && needs.build.result == 'success' && needs.release.result == 'success' }}"
 
 fail() {
   echo "GitHub Actions policy: $1" >&2
@@ -173,10 +172,6 @@ validate_step() {
           expected_fence_inputs=$'allow_github_artifacts\nallowlist'
           expected_fence_allowlist='uploads.github.com'
           ;;
-        release_info)
-          expected_fence_inputs='allow_github_artifacts'
-          expected_fence_allowlist=''
-          ;;
         *)
           fail "Fence is not expected in job $job_id: $workflow_path"
           ;;
@@ -320,7 +315,6 @@ done < <(grep -E "$ACTION_USES_PATTERN" "$RELEASE_WORKFLOW")
 [[ "$release_checkout_count" == "1" ]] || fail "release workflow must have exactly one checkout"
 grep -Fq 'actual_sha=$(git rev-parse HEAD)' "$RELEASE_WORKFLOW" || fail "release workflow must resolve the checked-out commit"
 grep -Fq 'if [[ "$actual_sha" != "$GITHUB_SHA" ]]; then' "$RELEASE_WORKFLOW" || fail "release workflow must verify the checked-out commit"
-grep -Fxq "    if: $RELEASE_INFO_IF" "$RELEASE_WORKFLOW" || fail "release info must require a successful build and release"
 
 sign_job=$(awk '
   /^  sign:$/ { in_job = 1 }
@@ -338,7 +332,7 @@ if grep -q -E 'run:[[:space:]]+script/|^[[:space:]]+script/' <<< "$sign_job"; th
   fail "sign job must not execute repository scripts"
 fi
 [[ "$(grep -Fc 'artifact-ids: ${{ needs.build.outputs.artifact-id }}' "$RELEASE_WORKFLOW")" == "1" ]] || fail "only sign may download the unnotarized build artifact"
-[[ "$(grep -Fc 'artifact-ids: ${{ needs.sign.outputs.artifact-id }}' "$RELEASE_WORKFLOW")" == "4" ]] || fail "all downstream jobs must download the signed artifact by ID"
+[[ "$(grep -Fc 'artifact-ids: ${{ needs.sign.outputs.artifact-id }}' "$RELEASE_WORKFLOW")" == "3" ]] || fail "all downstream jobs must download the signed artifact by ID"
 grep -Fq 'artifact-id: ${{ steps.upload-artifact.outputs.artifact-id }}' <<< "$sign_job" || fail "sign job must export its artifact ID"
 
 verify_line=$(grep -nF '      - name: verify unnotarized artifact' "$RELEASE_WORKFLOW" | cut -d: -f1)
