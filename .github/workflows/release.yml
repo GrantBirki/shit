@@ -101,7 +101,7 @@ jobs:
           retention-days: 5
           if-no-files-found: error
 
-  finalize:
+  sign:
     needs: build
     environment: release
     permissions: {}
@@ -138,7 +138,7 @@ jobs:
             exit 1
           fi
 
-          staging_dir="$RUNNER_TEMP/shit-finalize"
+          staging_dir="$RUNNER_TEMP/shit-sign"
           rm -rf "$staging_dir"
           mkdir -p "$staging_dir"
           ditto -x -k "$input_zip" "$staging_dir"
@@ -233,8 +233,8 @@ jobs:
             exit 1
           fi
 
-          app_path="$RUNNER_TEMP/shit-finalize/Shit.app"
-          entitlements_path="$RUNNER_TEMP/shit-finalize/entitlements.plist"
+          app_path="$RUNNER_TEMP/shit-sign/Shit.app"
+          entitlements_path="$RUNNER_TEMP/shit-sign/entitlements.plist"
           certificate_path="$RUNNER_TEMP/developer-id.p12"
           notary_key_path="$RUNNER_TEMP/AuthKey_${APPLE_NOTARY_KEY_ID}.p8"
           keychain_path="$RUNNER_TEMP/shit-signing.keychain-db"
@@ -251,7 +251,7 @@ jobs:
               "$notary_zip" \
               "$notary_result" \
               "$notary_log"
-            rm -rf "$RUNNER_TEMP/shit-finalize"
+            rm -rf "$RUNNER_TEMP/shit-sign"
           }
           trap cleanup EXIT
 
@@ -324,8 +324,8 @@ jobs:
             exit 1
           fi
 
-          signed_entitlements_path="$RUNNER_TEMP/shit-finalize/signed-entitlements.plist"
-          remaining_entitlements_path="$RUNNER_TEMP/shit-finalize/remaining-signed-entitlements.plist"
+          signed_entitlements_path="$RUNNER_TEMP/shit-sign/signed-entitlements.plist"
+          remaining_entitlements_path="$RUNNER_TEMP/shit-sign/remaining-signed-entitlements.plist"
           if ! codesign -d --entitlements :- "$app_path" > "$signed_entitlements_path" 2>/dev/null; then
             echo "Unable to read signed application entitlements."
             exit 1
@@ -388,7 +388,7 @@ jobs:
           ditto -c -k --sequesterRsrc --keepParent "$app_path" "$dist_dir/Shit.zip"
           shasum -a 256 "$dist_dir/Shit.zip" | awk '{print $1}' > "$dist_dir/Shit.zip.sha256"
 
-      - name: scan finalized artifact for tokens
+      - name: scan signed artifact for tokens
         run: |
           scan_dir="$(mktemp -d)"
           trap 'rm -rf "$scan_dir"' EXIT
@@ -400,7 +400,7 @@ jobs:
             exit 1
           fi
 
-      - name: upload finalized artifact
+      - name: upload signed artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # pin@v7.0.1
         id: upload-artifact
         with:
@@ -410,7 +410,7 @@ jobs:
           if-no-files-found: error
 
   attest:
-    needs: [build, finalize]
+    needs: [build, sign]
     environment: publish
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -433,7 +433,7 @@ jobs:
       - name: download artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # pin@8.0.1
         with:
-          artifact-ids: ${{ needs.finalize.outputs.artifact-id }}
+          artifact-ids: ${{ needs.sign.outputs.artifact-id }}
           path: "dist/"
 
       - name: attest build provenance
@@ -452,7 +452,7 @@ jobs:
           if-no-files-found: error
 
   verify:
-    needs: [build, finalize, attest]
+    needs: [build, sign, attest]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -469,7 +469,7 @@ jobs:
       - name: download artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # pin@8.0.1
         with:
-          artifact-ids: ${{ needs.finalize.outputs.artifact-id }}
+          artifact-ids: ${{ needs.sign.outputs.artifact-id }}
           path: "dist/"
 
       - name: download attestation bundle
@@ -520,7 +520,7 @@ jobs:
             --deny-self-hosted-runners
 
   release:
-    needs: [build, finalize, verify]
+    needs: [build, sign, verify]
     environment: publish
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -537,7 +537,7 @@ jobs:
       - name: download artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # pin@8.0.1
         with:
-          artifact-ids: ${{ needs.finalize.outputs.artifact-id }}
+          artifact-ids: ${{ needs.sign.outputs.artifact-id }}
           path: "dist/"
 
       - name: ensure tag does not exist
@@ -575,7 +575,7 @@ jobs:
             --generate-notes
 
   release_info:
-    needs: [build, finalize, release]
+    needs: [build, sign, release]
     if: ${{ always() && needs.build.result == 'success' && needs.release.result == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -589,7 +589,7 @@ jobs:
       - name: download artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # pin@8.0.1
         with:
-          artifact-ids: ${{ needs.finalize.outputs.artifact-id }}
+          artifact-ids: ${{ needs.sign.outputs.artifact-id }}
           path: "dist/"
 
       - name: print tap update info
