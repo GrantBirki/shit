@@ -267,11 +267,11 @@ while IFS= read -r uses_line; do
   fi
 done < <(grep -R -h -E "$ACTION_USES_PATTERN" "$WORKFLOW_DIR")
 
-check_action_parser '- uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd' 'actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd'
-check_action_parser '"uses": "actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd"' 'actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd'
-check_action_parser "'uses': 'attacker/action@main' # uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd" 'attacker/action@main'
+check_action_parser '- uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1'
+check_action_parser '"uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"' 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1'
+check_action_parser "'uses': 'attacker/action@main' # uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1" 'attacker/action@main'
 
-unsafe_checkout_fixture=$'jobs:\n  test:\n    steps:\n      - "uses": "actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd"\n      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd\n        with:\n          persist-credentials: false'
+unsafe_checkout_fixture=$'jobs:\n  test:\n    steps:\n      - "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"\n      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1\n        with:\n          persist-credentials: false'
 if (validate_workflow_steps "unsafe checkout fixture" <<< "$unsafe_checkout_fixture") >/dev/null 2>&1; then
   fail "step parser accepted an unsafe checkout followed by a safe checkout"
 fi
