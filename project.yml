@@ -49,6 +49,9 @@ targets:
         Debug:
           APP_DISPLAY_NAME: Shit Dev
           PRODUCT_BUNDLE_IDENTIFIER: io.birki.shit.dev
+        Release:
+          ARCHS: arm64
+          ONLY_ACTIVE_ARCH: "NO"
   ShitTests:
     type: bundle.unit-test
     platform: macOS

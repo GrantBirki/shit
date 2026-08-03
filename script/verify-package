@@ -8,6 +8,7 @@ source "$DIR/script/lib/common.sh"
 require_macos error "Package verification requires macOS."
 require_tool codesign "codesign not found."
 require_tool ditto "ditto not found."
+require_tool lipo "lipo not found."
 require_tool plutil "plutil not found."
 require_tool shasum "shasum not found."
 
@@ -99,6 +100,12 @@ if [[ ! -x "$EXECUTABLE_PATH" ]]; then
   exit 1
 fi
 
+architectures="$(lipo -archs "$EXECUTABLE_PATH")"
+if [[ "$architectures" != "arm64" ]]; then
+  echo -e "${RED}Expected exactly arm64; found: ${architectures:-none}.${OFF}"
+  exit 1
+fi
+
 plist_value() {
   plutil -extract "$1" raw -o - "$PLIST_PATH" 2>/dev/null || true
 }
@@ -143,4 +150,5 @@ fi
 
 echo -e "${GREEN}Package verification complete.${OFF}"
 echo "Version: $EXPECTED_VERSION"
+echo "Architectures: $architectures"
 echo "SHA256: $actual_sha"
