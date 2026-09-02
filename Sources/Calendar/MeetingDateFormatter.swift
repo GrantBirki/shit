@@ -1,12 +1,12 @@
 import Foundation
 
 enum MeetingDateFormatter {
-    static let timeOnly: DateFormatter = {
+    static var timeOnly: DateFormatter {
         let formatter = DateFormatter()
         formatter.timeStyle = .short
         formatter.dateStyle = .none
         return formatter
-    }()
+    }
 
     static var interval: DateIntervalFormatter {
         // DateIntervalFormatter can retain the old timezone after a system change.
