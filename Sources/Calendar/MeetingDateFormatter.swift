@@ -8,10 +8,11 @@ enum MeetingDateFormatter {
         return formatter
     }()
 
-    static let interval: DateIntervalFormatter = {
+    static var interval: DateIntervalFormatter {
+        // DateIntervalFormatter can retain the old timezone after a system change.
         let formatter = DateIntervalFormatter()
         formatter.timeStyle = .short
         formatter.dateStyle = .none
         return formatter
-    }()
+    }
 }

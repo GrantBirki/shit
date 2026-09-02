@@ -16,6 +16,7 @@ final class AppController {
     private let launchAtLoginManager = LaunchAtLoginManager()
     private var timer: Timer?
     private var eventStoreObserver: NSObjectProtocol?
+    private var timeZoneObserver: NSObjectProtocol?
     private var cancellables = Set<AnyCancellable>()
     private var latestEvents: [MeetingEvent] = []
     private var latestAuthorization: CalendarAuthorizationState = .notDetermined
@@ -90,6 +91,16 @@ final class AppController {
                 self?.refreshMeetingState()
             }
         }
+
+        timeZoneObserver = NotificationCenter.default.addObserver(
+            forName: .NSSystemTimeZoneDidChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.refreshTimeZone()
+            }
+        }
     }
 
     func stop() {
@@ -99,10 +110,22 @@ final class AppController {
         if let eventStoreObserver {
             NotificationCenter.default.removeObserver(eventStoreObserver)
         }
+        if let timeZoneObserver {
+            NotificationCenter.default.removeObserver(timeZoneObserver)
+            self.timeZoneObserver = nil
+        }
     }
 
     func showSettings() {
         settingsWindowController.show()
+    }
+
+    private func refreshTimeZone() {
+        NSTimeZone.resetSystemTimeZone()
+        updateMenu()
+        if let currentCandidate {
+            showOverlay(for: currentCandidate)
+        }
     }
 
     private func observeSettings() {

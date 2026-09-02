@@ -14,6 +14,8 @@ Controls when meeting alerts appear.
 
 Advance alerts missed while the Mac is asleep are skipped instead of appearing late. An **At start** alert can still appear while the meeting is active, for up to 15 minutes after it begins.
 
+Meeting times follow the Mac's current timezone. Changing the system timezone refreshes the menu and any visible alert without restarting Shit or changing when alerts are due.
+
 ## Calendar Filters
 
 Shit monitors all local Apple Calendars by default, then applies filters.
