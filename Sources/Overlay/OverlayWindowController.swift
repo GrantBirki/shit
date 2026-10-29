@@ -5,6 +5,7 @@ import SwiftUI
 final class OverlayWindowController {
     private var windows: [NSRect: OverlayWindow] = [:]
     private var currentOverlay: MeetingOverlayView?
+    private var previousPresentationOptions: NSApplication.PresentationOptions?
     private let displayFrames: () -> [NSRect]
     private let openURL: (URL) -> Bool
 
@@ -18,11 +19,15 @@ final class OverlayWindowController {
             self, selector: #selector(displaysDidChange(_:)),
             name: NSApplication.didChangeScreenParametersNotification, object: nil
         )
+        for name in [NSApplication.didResignActiveNotification, NSWindow.didResignKeyNotification] {
+            NotificationCenter.default.addObserver(
+                self, selector: #selector(focusDidChange(_:)), name: name, object: nil
+            )
+        }
     }
 
     func show(
         candidate: AlertCandidate,
-        focus: Bool = true,
         onDismiss: @escaping () -> Void
     ) {
         let onOpenMeeting = candidate.event.meetingURL.map { url in
@@ -34,20 +39,18 @@ final class OverlayWindowController {
         }
         let view = MeetingOverlayView(candidate: candidate, onDismiss: onDismiss, onOpenMeeting: onOpenMeeting)
         currentOverlay = view
-        present(view, on: displayFrames(), focus: focus)
+        present(view, on: displayFrames())
     }
 
     @objc private func displaysDidChange(_: Notification) {
         guard let currentOverlay else { return }
         let frames = displayFrames()
         if Set(frames) != Set(windows.keys) {
-            let hasFocus = windows.isEmpty || windows.values.contains(where: \.isKeyWindow)
-            present(currentOverlay, on: frames, focus: hasFocus)
+            present(currentOverlay, on: frames)
         }
     }
 
-    private func present(_ view: MeetingOverlayView, on frames: [NSRect], focus: Bool) {
-        let activeDisplay = NSScreen.main?.frame
+    private func present(_ view: MeetingOverlayView, on frames: [NSRect]) {
         for (frame, window) in windows where !frames.contains(frame) {
             window.orderOut(nil)
             windows.removeValue(forKey: frame)
@@ -60,9 +63,36 @@ final class OverlayWindowController {
             window.setFrame(frame, display: true)
             window.orderFront(nil)
         }
-        if focus, let keyWindow = activeDisplay.flatMap({ windows[$0] }) ?? windows.values.first {
+        updatePresentationOptions()
+        focusOverlay()
+    }
+
+    private func updatePresentationOptions() {
+        if windows.isEmpty {
+            if let previousPresentationOptions {
+                NSApp.presentationOptions = previousPresentationOptions
+                self.previousPresentationOptions = nil
+            }
+        } else if previousPresentationOptions == nil {
+            previousPresentationOptions = NSApp.presentationOptions
+            NSApp.presentationOptions = [.hideDock, .hideMenuBar, .disableProcessSwitching, .disableHideApplication]
+        }
+    }
+
+    @objc private func focusDidChange(_: Notification) {
+        guard currentOverlay != nil else { return }
+        // Let AppKit finish transferring focus, including between copies of this alert.
+        DispatchQueue.main.async { [weak self] in self?.focusOverlay() }
+    }
+
+    private func focusOverlay() {
+        guard let window = windows.values.first(where: \.isKeyWindow)
+            ?? NSScreen.main.flatMap({ windows[$0.frame] }) ?? windows.values.first else { return }
+        if !NSApp.isActive {
             NSApp.activate(ignoringOtherApps: true)
-            keyWindow.makeKeyAndOrderFront(nil)
+        }
+        if !window.isKeyWindow {
+            window.makeKeyAndOrderFront(nil)
         }
     }
 
@@ -85,6 +115,7 @@ final class OverlayWindowController {
         currentOverlay = nil
         windows.values.forEach { $0.orderOut(nil) }
         windows.removeAll()
+        updatePresentationOptions()
     }
 }
 

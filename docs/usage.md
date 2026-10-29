@@ -34,7 +34,7 @@ By default, Shit alerts you 5 minutes before a meeting. You can set the first al
 - Dismiss button
 - Open Meeting Link button when the event contains a meeting link
 
-Click Dismiss or press Escape to close the current overlay. That alert stays dismissed so it does not immediately pop back up. If you configured a second alert, dismissing the first does not cancel the later alert.
+The alert keeps keyboard focus on one display and blocks app switching with ⌘Tab while it covers your screens. Click **Dismiss** or press **Escape** to close it on every display and resume normal app switching. That alert stays dismissed so it does not immediately pop back up. If you configured a second alert, dismissing the first does not cancel the later alert.
 
 Click **Open Meeting Link** or press **⌘J** to open the link with the default app. The overlay closes when macOS accepts the link. If the organizer changes or removes the link while the alert is open, the button and shortcut update on the next calendar refresh. Shit checks the event URL and location. It also recognizes conference links in the event notes, including Google Meet, Zoom, Microsoft Teams, Webex, and FaceTime.
 

@@ -206,10 +206,9 @@ final class AppController {
         updateMenu()
     }
 
-    private func showOverlay(for candidate: AlertCandidate, focus: Bool = true) {
+    private func showOverlay(for candidate: AlertCandidate) {
         overlayController.show(
             candidate: candidate,
-            focus: focus,
             onDismiss: { [weak self] in self?.dismiss(candidate: candidate) }
         )
     }
@@ -291,7 +290,7 @@ final class AppController {
         guard event != candidate.event else { return }
         let updated = AlertCandidate(event: event, offset: candidate.offset)
         currentCandidate = updated
-        showOverlay(for: updated, focus: false)
+        showOverlay(for: updated)
     }
 
     private func dismiss(candidate: AlertCandidate) {

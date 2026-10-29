@@ -5,6 +5,25 @@ import XCTest
 
 @MainActor
 final class OverlayWindowTests: XCTestCase {
+    func testAppSwitchingStaysDisabledThroughReplacementUntilDismissal() throws {
+        let app = NSApplication.shared
+        let originalOptions = app.presentationOptions
+        app.presentationOptions = [.autoHideDock]
+        defer { app.presentationOptions = originalOptions }
+        let frames = try twoDisplayFrames()
+        let controller = OverlayWindowController(displayFrames: { frames })
+        defer { controller.dismiss() }
+
+        controller.show(candidate: candidate("first")) { XCTFail("Dismissed the previous alert") }
+        XCTAssertTrue(app.presentationOptions.contains(.disableProcessSwitching))
+        controller.show(candidate: candidate("second")) { controller.dismiss() }
+        XCTAssertTrue(app.presentationOptions.contains(.disableProcessSwitching))
+        let windows = try visibleWindows(on: frames)
+        try overlay(in: XCTUnwrap(windows.last)).onDismiss()
+        XCTAssertTrue(windows.allSatisfy { !$0.isVisible })
+        XCTAssertEqual(app.presentationOptions, [.autoHideDock])
+    }
+
     func testEscapeDismissesReplacementBeforeTheFocusedViewReceivesIt() throws {
         let frames = try twoDisplayFrames()
         let controller = OverlayWindowController(displayFrames: { frames })
@@ -35,6 +54,7 @@ final class OverlayWindowTests: XCTestCase {
     }
 
     func testJoinShortcutUsesReplacementLinkAndDismissesOnlyOnSuccess() throws {
+        let originalOptions = NSApplication.shared.presentationOptions
         let first = try XCTUnwrap(URL(string: "https://example.org/first"))
         let second = try XCTUnwrap(URL(string: "https://example.org/second"))
         var opened: [URL] = []
@@ -54,10 +74,12 @@ final class OverlayWindowTests: XCTestCase {
         XCTAssertTrue(window.performKeyEquivalent(with: shortcut))
         XCTAssertEqual(opened, [second])
         XCTAssertTrue(windows.allSatisfy(\.isVisible))
+        XCTAssertTrue(NSApp.presentationOptions.contains(.disableProcessSwitching))
         canOpen = true
         XCTAssertTrue(window.performKeyEquivalent(with: shortcut))
         XCTAssertEqual(opened, [second, second])
         XCTAssertTrue(windows.allSatisfy { !$0.isVisible })
+        XCTAssertEqual(NSApp.presentationOptions, originalOptions)
     }
 
     func testReplacingLinkedMeetingWithLinklessMeetingRemovesJoinActionAndShortcut() throws {
@@ -122,6 +144,7 @@ final class OverlayWindowTests: XCTestCase {
     }
 
     func testDisplayChangesShowTheCurrentAlertAndRemoveDisconnectedCopies() throws {
+        let originalOptions = NSApplication.shared.presentationOptions
         let frames = try twoDisplayFrames()
         var connected = [frames[0]]
         let controller = OverlayWindowController(displayFrames: { connected })
@@ -140,7 +163,15 @@ final class OverlayWindowTests: XCTestCase {
         XCTAssertFalse(windows[0].isVisible)
         let remaining = try XCTUnwrap(visibleWindows(on: connected).first)
         XCTAssertTrue(remaining === windows[1])
-        try overlay(in: remaining).onDismiss()
+        connected = []
+        NotificationCenter.default.post(name: NSApplication.didChangeScreenParametersNotification, object: NSApp)
+        XCTAssertFalse(remaining.isVisible)
+        XCTAssertEqual(NSApp.presentationOptions, originalOptions)
+        connected = [frames[0]]
+        NotificationCenter.default.post(name: NSApplication.didChangeScreenParametersNotification, object: NSApp)
+        let reconnected = try XCTUnwrap(visibleWindows(on: connected).first)
+        XCTAssertTrue(NSApp.presentationOptions.contains(.disableProcessSwitching))
+        try overlay(in: reconnected).onDismiss()
         connected = frames
         NotificationCenter.default.post(name: NSApplication.didChangeScreenParametersNotification, object: NSApp)
         XCTAssertTrue(try visibleWindows(on: []).isEmpty)
