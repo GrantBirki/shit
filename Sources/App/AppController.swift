@@ -191,9 +191,8 @@ final class AppController {
             now: now
         )
 
-        if let candidate = candidates.first(where: { alertState.shouldPresent($0, now: now) }) {
+        if let candidate = alertState.takeLatest(from: candidates, now: now) {
             currentCandidate = candidate
-            alertState.markPresented(candidate)
             showOverlay(for: candidate)
         } else {
             clearCurrentCandidateIfStale(now: now, filteredEvents: filteredEvents)
@@ -289,10 +288,9 @@ final class AppController {
     }
 
     private func dismiss(candidate: AlertCandidate) {
+        guard currentCandidate?.key == candidate.key else { return }
         alertState.dismiss(candidate)
-        if currentCandidate?.key == candidate.key {
-            currentCandidate = nil
-        }
+        currentCandidate = nil
         overlayController.dismiss()
         updateMenu()
     }

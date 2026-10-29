@@ -3,47 +3,71 @@ import SwiftUI
 
 @MainActor
 final class OverlayWindowController {
-    private var windows: [NSWindow] = []
+    private var windows: [NSRect: OverlayWindow] = [:]
+    private var currentOverlay: MeetingOverlayView?
+    private let displayFrames: () -> [NSRect]
 
-    func show(
-        candidate: AlertCandidate,
-        onDismiss: @escaping () -> Void
-    ) {
-        dismiss()
+    init(displayFrames: @escaping () -> [NSRect] = { NSScreen.screens.map(\.frame) }) {
+        self.displayFrames = displayFrames
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(displaysDidChange(_:)),
+            name: NSApplication.didChangeScreenParametersNotification, object: nil
+        )
+    }
 
-        windows = NSScreen.screens.map { screen in
-            let view = MeetingOverlayView(
-                candidate: candidate,
-                onDismiss: onDismiss
-            )
-            let hostingController = NSHostingController(rootView: view)
-            hostingController.view.frame = NSRect(origin: .zero, size: screen.frame.size)
-            hostingController.view.autoresizingMask = [.width, .height]
-            let window = OverlayWindow(
-                contentRect: screen.frame,
-                styleMask: [.borderless],
-                backing: .buffered,
-                defer: false,
-                screen: screen
-            )
-            window.onDismissShortcut = onDismiss
-            window.contentViewController = hostingController
-            window.setFrame(screen.frame, display: true)
-            window.backgroundColor = .clear
-            window.isOpaque = false
-            window.hasShadow = false
-            window.level = .screenSaver
-            window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
-            window.ignoresMouseEvents = false
-            window.makeKeyAndOrderFront(nil)
-            return window
+    func show(candidate: AlertCandidate, onDismiss: @escaping () -> Void) {
+        let view = MeetingOverlayView(candidate: candidate, onDismiss: onDismiss)
+        currentOverlay = view
+        present(view, on: displayFrames(), focus: true)
+    }
+
+    @objc private func displaysDidChange(_: Notification) {
+        guard let currentOverlay else { return }
+        let frames = displayFrames()
+        if Set(frames) != Set(windows.keys) {
+            let hasFocus = windows.isEmpty || windows.values.contains(where: \.isKeyWindow)
+            present(currentOverlay, on: frames, focus: hasFocus)
         }
+    }
 
-        NSApp.activate(ignoringOtherApps: true)
+    private func present(_ view: MeetingOverlayView, on frames: [NSRect], focus: Bool) {
+        let activeDisplay = NSScreen.main?.frame
+        for (frame, window) in windows where !frames.contains(frame) {
+            window.orderOut(nil)
+            windows.removeValue(forKey: frame)
+        }
+        for frame in frames {
+            let window = windows[frame] ?? makeWindow(frame: frame)
+            windows[frame] = window
+            window.onDismissShortcut = view.onDismiss
+            window.contentViewController = NSHostingController(rootView: view)
+            window.setFrame(frame, display: true)
+            window.orderFront(nil)
+        }
+        if focus, let keyWindow = activeDisplay.flatMap({ windows[$0] }) ?? windows.values.first {
+            NSApp.activate(ignoringOtherApps: true)
+            keyWindow.makeKeyAndOrderFront(nil)
+        }
+    }
+
+    private func makeWindow(frame: NSRect) -> OverlayWindow {
+        let window = OverlayWindow(
+            contentRect: frame,
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.backgroundColor = .clear
+        window.isOpaque = false
+        window.hasShadow = false
+        window.level = .screenSaver
+        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
+        return window
     }
 
     func dismiss() {
-        windows.forEach { $0.orderOut(nil) }
+        currentOverlay = nil
+        windows.values.forEach { $0.orderOut(nil) }
         windows.removeAll()
     }
 }
@@ -78,9 +102,9 @@ private final class OverlayWindow: NSWindow {
         true
     }
 
-    override func keyDown(with event: NSEvent) {
-        guard event.isOverlayDismissShortcut else {
-            super.keyDown(with: event)
+    override func sendEvent(_ event: NSEvent) {
+        guard event.type == .keyDown, event.isOverlayDismissShortcut else {
+            super.sendEvent(event)
             return
         }
 
