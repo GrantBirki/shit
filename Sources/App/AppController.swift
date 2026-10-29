@@ -10,7 +10,7 @@ final class AppController {
     private let detector: MeetingDetector
     private var alertState = AlertStateStore()
     private let menuBarController: MenuBarController
-    private let overlayController = OverlayWindowController()
+    private let overlayController: OverlayWindowController
     private let settingsWindowController: SettingsWindowController
     private let aboutWindowController = AboutWindowController()
     private let launchAtLoginManager = LaunchAtLoginManager()
@@ -22,9 +22,14 @@ final class AppController {
     private var latestAuthorization: CalendarAuthorizationState = .notDetermined
     private var currentCandidate: AlertCandidate?
 
-    init(calendarProvider: CalendarEventProviding = EventKitCalendarEventProvider()) {
-        settings = SettingsStore()
+    init(
+        calendarProvider: CalendarEventProviding = EventKitCalendarEventProvider(),
+        settings: SettingsStore = SettingsStore(),
+        overlayController: OverlayWindowController = OverlayWindowController()
+    ) {
+        self.settings = settings
         self.calendarProvider = calendarProvider
+        self.overlayController = overlayController
         detector = MeetingDetector()
         settingsWindowController = SettingsWindowController(
             settings: settings,
@@ -167,7 +172,7 @@ final class AppController {
         updateMenu()
     }
 
-    private func refreshMeetingState() {
+    func refreshMeetingState() {
         latestAuthorization = calendarProvider.authorizationState
         guard latestAuthorization.canReadEvents else {
             latestEvents = []
@@ -195,15 +200,16 @@ final class AppController {
             currentCandidate = candidate
             showOverlay(for: candidate)
         } else {
-            clearCurrentCandidateIfStale(now: now, filteredEvents: filteredEvents)
+            refreshCurrentCandidate(now: now, filteredEvents: filteredEvents)
         }
 
         updateMenu()
     }
 
-    private func showOverlay(for candidate: AlertCandidate) {
+    private func showOverlay(for candidate: AlertCandidate, focus: Bool = true) {
         overlayController.show(
             candidate: candidate,
+            focus: focus,
             onDismiss: { [weak self] in self?.dismiss(candidate: candidate) }
         )
     }
@@ -268,23 +274,24 @@ final class AppController {
             && candidate.event.calendarID == "test-calendar"
     }
 
-    private func clearCurrentCandidateIfStale(now: Date, filteredEvents: [MeetingEvent]) {
+    private func refreshCurrentCandidate(now: Date, filteredEvents: [MeetingEvent]) {
         guard let candidate = currentCandidate else { return }
-        if now >= candidate.event.endDate {
+        let event: MeetingEvent? = if isTestCandidate(candidate) {
+            candidate.event
+        } else {
+            filteredEvents.first {
+                $0.id == candidate.event.id && $0.startDate == candidate.event.startDate
+            }
+        }
+        guard let event, event.endDate > now else {
             currentCandidate = nil
             overlayController.dismiss()
             return
         }
-        if isTestCandidate(candidate) {
-            return
-        }
-        let eventStillIncluded = filteredEvents.contains { event in
-            event.id == candidate.event.id && event.startDate == candidate.event.startDate
-        }
-        if !eventStillIncluded {
-            currentCandidate = nil
-            overlayController.dismiss()
-        }
+        guard event != candidate.event else { return }
+        let updated = AlertCandidate(event: event, offset: candidate.offset)
+        currentCandidate = updated
+        showOverlay(for: updated, focus: false)
     }
 
     private func dismiss(candidate: AlertCandidate) {

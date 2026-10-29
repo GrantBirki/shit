@@ -4,6 +4,21 @@ import EventKit
 import XCTest
 
 final class EventKitMappingTests: XCTestCase {
+    func testMapsJoinLinkFromCalendarEventNotes() {
+        let store = EKEventStore()
+        let event = EKEvent(eventStore: store)
+        let calendar = EKCalendar(for: .event, eventStore: store)
+        calendar.title = "Work"
+        event.calendar = calendar
+        event.title = "Team Meeting"
+        event.startDate = Date()
+        event.endDate = event.startDate.addingTimeInterval(1800)
+        event.url = URL(string: "https://example.org/calendar/entry")
+        event.notes = "Join the meeting at https://meet.google.com/abc-defg-hij"
+
+        XCTAssertEqual(MeetingEvent(event: event).meetingURL?.absoluteString, "https://meet.google.com/abc-defg-hij")
+    }
+
     func testMapsEventKitAvailability() {
         XCTAssertEqual(MeetingAvailability(eventAvailability: .busy), .busy)
         XCTAssertEqual(MeetingAvailability(eventAvailability: .free), .free)

@@ -7,6 +7,7 @@ struct MeetingEvent: Equatable, Identifiable {
     let title: String
     let startDate: Date
     let endDate: Date
+    let meetingURL: URL?
     let isAllDay: Bool
     let availability: MeetingAvailability
     let status: MeetingStatus
@@ -19,6 +20,7 @@ struct MeetingEvent: Equatable, Identifiable {
         title: String,
         startDate: Date,
         endDate: Date,
+        meetingURL: URL? = nil,
         isAllDay: Bool = false,
         availability: MeetingAvailability = .busy,
         status: MeetingStatus = .confirmed,
@@ -30,6 +32,7 @@ struct MeetingEvent: Equatable, Identifiable {
         self.title = title
         self.startDate = startDate
         self.endDate = endDate
+        self.meetingURL = meetingURL
         self.isAllDay = isAllDay
         self.availability = availability
         self.status = status

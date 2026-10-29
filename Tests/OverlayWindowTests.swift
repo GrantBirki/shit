@@ -34,6 +34,93 @@ final class OverlayWindowTests: XCTestCase {
         XCTAssertTrue(windows.allSatisfy { !$0.isVisible })
     }
 
+    func testJoinShortcutUsesReplacementLinkAndDismissesOnlyOnSuccess() throws {
+        let first = try XCTUnwrap(URL(string: "https://example.org/first"))
+        let second = try XCTUnwrap(URL(string: "https://example.org/second"))
+        var opened: [URL] = []
+        var canOpen = false
+        let frames = try twoDisplayFrames()
+        let controller = OverlayWindowController(displayFrames: { frames }, openURL: { url in
+            opened.append(url)
+            return canOpen
+        })
+        defer { controller.dismiss() }
+        controller.show(candidate: candidate("first", meetingURL: first)) { XCTFail("Dismissed the previous alert") }
+        controller.show(candidate: candidate("second", meetingURL: second)) { controller.dismiss() }
+        let windows = try visibleWindows(on: frames)
+        let window = try XCTUnwrap(windows.last)
+        window.makeKeyAndOrderFront(nil)
+        let shortcut = try keyDown("j", keyCode: 38, modifiers: .command, in: window)
+        XCTAssertTrue(window.performKeyEquivalent(with: shortcut))
+        XCTAssertEqual(opened, [second])
+        XCTAssertTrue(windows.allSatisfy(\.isVisible))
+        canOpen = true
+        XCTAssertTrue(window.performKeyEquivalent(with: shortcut))
+        XCTAssertEqual(opened, [second, second])
+        XCTAssertTrue(windows.allSatisfy { !$0.isVisible })
+    }
+
+    func testReplacingLinkedMeetingWithLinklessMeetingRemovesJoinActionAndShortcut() throws {
+        let url = try XCTUnwrap(URL(string: "https://example.org/meeting"))
+        let controller = OverlayWindowController(openURL: { _ in
+            XCTFail("Opened a stale link")
+            return true
+        })
+        defer { controller.dismiss() }
+        controller.show(candidate: candidate("linked", meetingURL: url)) {}
+        controller.show(candidate: candidate("linkless")) {}
+        for window in try visibleWindows(on: NSScreen.screens.map(\.frame)) {
+            XCTAssertNil(try overlay(in: window).onOpenMeeting)
+            let shortcut = try keyDown("j", keyCode: 38, modifiers: .command, in: window)
+            XCTAssertFalse(window.performKeyEquivalent(with: shortcut))
+        }
+    }
+
+    func testCalendarRefreshUpdatesAndRemovesJoinLinkOnEveryVisibleOverlay() throws {
+        let original = try XCTUnwrap(URL(string: "https://example.org/original"))
+        let updated = try XCTUnwrap(URL(string: "https://example.org/updated"))
+        let start = Date().addingTimeInterval(295)
+        let calendar = RefreshTestCalendar()
+        let frames = try twoDisplayFrames()
+        var opened: [URL] = []
+        let overlays = OverlayWindowController(displayFrames: { frames }, openURL: { url in
+            opened.append(url)
+            return false
+        })
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: UUID().uuidString))
+        let app = AppController(
+            calendarProvider: calendar,
+            settings: SettingsStore(defaults: defaults),
+            overlayController: overlays
+        )
+        defer { app.stop() }
+        calendar.meetings = [.fixture(startDate: start, meetingURL: original)]
+        app.refreshMeetingState()
+        let windows = try visibleWindows(on: frames)
+        for window in windows {
+            XCTAssertEqual(try overlay(in: window).candidate.event.meetingURL, original)
+        }
+
+        calendar.meetings = [.fixture(startDate: start, meetingURL: updated)]
+        app.refreshMeetingState()
+        for window in windows {
+            XCTAssertTrue(window.isVisible)
+            let shortcut = try keyDown("j", keyCode: 38, modifiers: .command, in: window)
+            XCTAssertTrue(window.performKeyEquivalent(with: shortcut))
+        }
+        XCTAssertEqual(opened, [updated, updated])
+
+        calendar.meetings = [.fixture(startDate: start, meetingURL: nil)]
+        app.refreshMeetingState()
+        for window in windows {
+            XCTAssertTrue(window.isVisible)
+            XCTAssertNil(try overlay(in: window).onOpenMeeting)
+            let shortcut = try keyDown("j", keyCode: 38, modifiers: .command, in: window)
+            XCTAssertFalse(window.performKeyEquivalent(with: shortcut))
+        }
+        XCTAssertEqual(opened, [updated, updated])
+    }
+
     func testDisplayChangesShowTheCurrentAlertAndRemoveDisconnectedCopies() throws {
         let frames = try twoDisplayFrames()
         var connected = [frames[0]]
@@ -59,8 +146,8 @@ final class OverlayWindowTests: XCTestCase {
         XCTAssertTrue(try visibleWindows(on: []).isEmpty)
     }
 
-    private func candidate(_ id: String) -> AlertCandidate {
-        AlertCandidate(event: .fixture(id: id, startDate: Date()), offset: .atStart)
+    private func candidate(_ id: String, meetingURL: URL? = nil) -> AlertCandidate {
+        AlertCandidate(event: .fixture(id: id, startDate: Date(), meetingURL: meetingURL), offset: .atStart)
     }
 
     private func twoDisplayFrames() throws -> [NSRect] {
@@ -98,5 +185,22 @@ private final class KeyConsumingView: NSView {
 
     override func keyDown(with _: NSEvent) {
         receivedKey = true
+    }
+}
+
+private final class RefreshTestCalendar: CalendarEventProviding {
+    let authorizationState = CalendarAuthorizationState.authorized
+    var meetings: [MeetingEvent] = []
+
+    func events(start _: Date, end _: Date) -> [MeetingEvent] {
+        meetings
+    }
+
+    func calendars() -> [CalendarSource] {
+        []
+    }
+
+    func requestAccess() async -> CalendarAuthorizationState {
+        authorizationState
     }
 }

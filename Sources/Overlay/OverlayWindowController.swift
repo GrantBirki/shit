@@ -6,19 +6,35 @@ final class OverlayWindowController {
     private var windows: [NSRect: OverlayWindow] = [:]
     private var currentOverlay: MeetingOverlayView?
     private let displayFrames: () -> [NSRect]
+    private let openURL: (URL) -> Bool
 
-    init(displayFrames: @escaping () -> [NSRect] = { NSScreen.screens.map(\.frame) }) {
+    init(
+        displayFrames: @escaping () -> [NSRect] = { NSScreen.screens.map(\.frame) },
+        openURL: @escaping (URL) -> Bool = { NSWorkspace.shared.open($0) }
+    ) {
         self.displayFrames = displayFrames
+        self.openURL = openURL
         NotificationCenter.default.addObserver(
             self, selector: #selector(displaysDidChange(_:)),
             name: NSApplication.didChangeScreenParametersNotification, object: nil
         )
     }
 
-    func show(candidate: AlertCandidate, onDismiss: @escaping () -> Void) {
-        let view = MeetingOverlayView(candidate: candidate, onDismiss: onDismiss)
+    func show(
+        candidate: AlertCandidate,
+        focus: Bool = true,
+        onDismiss: @escaping () -> Void
+    ) {
+        let onOpenMeeting = candidate.event.meetingURL.map { url in
+            { [openURL] in
+                if openURL(url) {
+                    onDismiss()
+                }
+            }
+        }
+        let view = MeetingOverlayView(candidate: candidate, onDismiss: onDismiss, onOpenMeeting: onOpenMeeting)
         currentOverlay = view
-        present(view, on: displayFrames(), focus: true)
+        present(view, on: displayFrames(), focus: focus)
     }
 
     @objc private func displaysDidChange(_: Notification) {

@@ -52,7 +52,7 @@ final class EventKitCalendarEventProvider: CalendarEventProviding {
     }
 }
 
-private extension MeetingEvent {
+extension MeetingEvent {
     init(event: EKEvent) {
         let participationStatus = event.attendees?
             .first(where: { $0.isCurrentUser })?
@@ -65,6 +65,7 @@ private extension MeetingEvent {
             title: event.title?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty ?? "Untitled Meeting",
             startDate: event.startDate,
             endDate: event.endDate,
+            meetingURL: MeetingLink.resolve(url: event.url, location: event.location, notes: event.notes),
             isAllDay: event.isAllDay,
             availability: MeetingAvailability(eventAvailability: event.availability),
             status: MeetingStatus(eventStatus: event.status),
