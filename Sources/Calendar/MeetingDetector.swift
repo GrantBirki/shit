@@ -104,14 +104,12 @@ struct MeetingDetector {
             .sorted { $0.triggerDate < $1.triggerDate }
     }
 
-    func currentMeeting(events: [MeetingEvent], filter: MeetingFilterSettings, now: Date) -> MeetingEvent? {
-        filteredEvents(events: events, filter: filter, now: now)
-            .first { $0.isActive(at: now) }
+    func currentMeeting(filteredEvents: [MeetingEvent], now: Date) -> MeetingEvent? {
+        filteredEvents.first { $0.isActive(at: now) }
     }
 
-    func nextMeeting(events: [MeetingEvent], filter: MeetingFilterSettings, now: Date) -> MeetingEvent? {
-        filteredEvents(events: events, filter: filter, now: now)
-            .first { $0.startDate > now }
+    func nextMeeting(filteredEvents: [MeetingEvent], now: Date) -> MeetingEvent? {
+        filteredEvents.first { $0.startDate > now }
     }
 
     private func isDue(_ candidate: AlertCandidate, now: Date) -> Bool {
