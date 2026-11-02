@@ -1,9 +1,27 @@
 import SwiftUI
 
+@MainActor
+@Observable
+final class MeetingLinkRecovery {
+    var failedURL: URL?
+    private let copyURL: (URL) -> Void
+
+    init(copyURL: @escaping (URL) -> Void) {
+        self.copyURL = copyURL
+    }
+
+    func copyLink() {
+        if let failedURL {
+            copyURL(failedURL)
+        }
+    }
+}
+
 struct MeetingOverlayView: View {
     let candidate: AlertCandidate
     let onDismiss: () -> Void
     let onOpenMeeting: (() -> Void)?
+    let linkRecovery: MeetingLinkRecovery
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
@@ -23,25 +41,34 @@ struct MeetingOverlayView: View {
 
                     GlassMeetingCard(event: candidate.event)
 
+                    if linkRecovery.failedURL != nil {
+                        GlassPanel(prominence: .subtle) {
+                            HStack {
+                                Label("Couldn't open the meeting link.", systemImage: "exclamationmark.circle")
+                                Button("Copy Link", action: linkRecovery.copyLink)
+                                    .accessibilityHint("Copies the meeting link to the clipboard.")
+                            }
+                        }
+                    }
+
                     HStack(spacing: 12) {
                         if let onOpenMeeting {
-                            GlassProminentActionButton(
+                            GlassActionButton(
                                 title: "Open Meeting Link",
                                 systemImage: "video",
-                                tint: .blue,
-                                isEnabled: true,
+                                isProminent: true,
                                 action: onOpenMeeting
                             )
                             .keyboardShortcut("j", modifiers: .command)
                             .help("Open the meeting link (⌘J)")
                         }
-                        GlassProminentActionButton(
+                        GlassActionButton(
                             title: "Dismiss",
                             systemImage: "checkmark",
-                            tint: Color(red: 0.18, green: 0.64, blue: 0.34),
-                            isEnabled: true,
+                            isProminent: onOpenMeeting == nil,
                             action: onDismiss
                         )
+                        .help("Dismiss the alert (Esc)")
                     }
                 }
                 .padding(30)

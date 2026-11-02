@@ -1,3 +1,4 @@
+import Accessibility
 import AppKit
 import SwiftUI
 
@@ -17,14 +18,26 @@ final class OverlayWindowController {
     private let isAppActive: () -> Bool
     private let displayFrames: () -> [NSRect]
     private let openURL: (URL) -> Bool
+    private let linkRecovery: MeetingLinkRecovery
+    private let announceLinkFailure: () -> Void
 
     init(
         displayFrames: @escaping () -> [NSRect] = { NSScreen.screens.map(\.frame) },
         isAppActive: @escaping () -> Bool = { NSApp.isActive },
-        openURL: @escaping (URL) -> Bool = { NSWorkspace.shared.open($0) }
+        openURL: @escaping (URL) -> Bool = { NSWorkspace.shared.open($0) },
+        copyURL: @escaping (URL) -> Void = { url in
+            let pasteboard = NSPasteboard.general
+            pasteboard.clearContents()
+            pasteboard.setString(url.absoluteString, forType: .string)
+        },
+        announceLinkFailure: @escaping () -> Void = {
+            AccessibilityNotification.Announcement("Couldn't open the meeting link. Copy Link is available.").post()
+        }
     ) {
         self.displayFrames = displayFrames
         self.openURL = openURL
+        linkRecovery = MeetingLinkRecovery(copyURL: copyURL)
+        self.announceLinkFailure = announceLinkFailure
         self.isAppActive = isAppActive
         NotificationCenter.default.addObserver(
             self, selector: #selector(appBecameActive(_:)),
@@ -49,16 +62,31 @@ final class OverlayWindowController {
         onDismiss: @escaping () -> Void
     ) {
         self.lockFocus = lockFocus
+        if !hasCurrentLink(for: candidate) {
+            linkRecovery.failedURL = nil
+        }
         let onOpenMeeting = candidate.event.meetingURL.map { url in
-            { [openURL] in
+            { [weak self] in
+                guard let self, hasCurrentLink(for: candidate) else { return }
                 if openURL(url) {
+                    linkRecovery.failedURL = nil
                     (onJoined ?? onDismiss)()
+                } else if linkRecovery.failedURL != url {
+                    linkRecovery.failedURL = url
+                    announceLinkFailure()
                 }
             }
         }
-        let view = MeetingOverlayView(candidate: candidate, onDismiss: onDismiss, onOpenMeeting: onOpenMeeting)
+        let view = MeetingOverlayView(
+            candidate: candidate, onDismiss: onDismiss, onOpenMeeting: onOpenMeeting, linkRecovery: linkRecovery
+        )
         currentOverlay = view
         present(view, on: displayFrames(), requestFocus: requestFocus)
+    }
+
+    private func hasCurrentLink(for candidate: AlertCandidate) -> Bool {
+        guard let current = currentOverlay?.candidate else { return false }
+        return current.key == candidate.key && current.event.meetingURL == candidate.event.meetingURL
     }
 
     @objc private func displaysDidChange(_: Notification) {
@@ -150,6 +178,7 @@ final class OverlayWindowController {
 
     func dismiss() {
         currentOverlay = nil
+        linkRecovery.failedURL = nil
         awaitingFirstDisplay = false
         presentationDeferred = false
         windows.values.forEach { $0.orderOut(nil) }
