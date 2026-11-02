@@ -55,6 +55,16 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertFalse(reloaded.menuBarIconVisible)
     }
 
+    func testSecondAlertSurvivesRelaunchWithDefaultFirstAlert() throws {
+        let defaults = try makeDefaults()
+        let settings = SettingsStore(defaults: defaults)
+        settings.setSecondAlertEnabled(true)
+        XCTAssertEqual(settings.alertOffsets, [.fiveMinutesBefore, .oneMinuteBefore])
+
+        let reloaded = SettingsStore(defaults: defaults)
+        XCTAssertEqual(reloaded.alertOffsets, [.fiveMinutesBefore, .oneMinuteBefore])
+    }
+
     func testMigratesLegacyAlertTimingValues() throws {
         let cases = [
             LegacyAlertCase(rawValue: "fiveMinutesBefore", first: 5, second: nil),

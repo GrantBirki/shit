@@ -81,11 +81,7 @@ final class AppController {
             refreshMeetingState()
         }
 
-        timer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                self?.refreshMeetingState()
-            }
-        }
+        timer = Self.scheduleMeetingPoll { [weak self] in self?.refreshMeetingState() }
 
         eventStoreObserver = NotificationCenter.default.addObserver(
             forName: .EKEventStoreChanged,
@@ -106,6 +102,16 @@ final class AppController {
                 self?.refreshTimeZone()
             }
         }
+    }
+
+    static func scheduleMeetingPoll(_ refresh: @escaping @MainActor () -> Void) -> Timer {
+        let interval: TimeInterval = 30
+        let timer = Timer(fire: Date(timeIntervalSinceNow: interval), interval: interval, repeats: true) { _ in
+            // This timer fires on the main run loop, including while the status menu is tracking.
+            MainActor.assumeIsolated(refresh)
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        return timer
     }
 
     func stop() {
