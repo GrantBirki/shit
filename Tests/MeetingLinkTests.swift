@@ -11,9 +11,11 @@ final class MeetingLinkTests: XCTestCase {
 
     func testCustomLinkEmbeddedInLocationWinsOverCalendarEntry() throws {
         let link = try XCTUnwrap(URL(string: "https://video.example.org/room/123"))
-        let entry = URL(string: "https://calendar.example.org/event")
         let location = "Video room: " + link.absoluteString
-        XCTAssertEqual(MeetingLink.resolve(url: entry, location: location, notes: nil), link)
+        for entry in ["https://calendar.example.org/event", "https://www.google.com/calendar/event?eid=123"] {
+            let url = try XCTUnwrap(URL(string: entry))
+            XCTAssertEqual(MeetingLink.resolve(url: url, location: location, notes: nil), link)
+        }
         XCTAssertNil(MeetingLink.resolve(url: nil, location: nil, notes: "Agenda: " + link.absoluteString))
     }
 

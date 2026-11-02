@@ -25,7 +25,11 @@ enum MeetingLink {
     }
 
     private static func isCalendarEntry(_ url: URL) -> Bool {
-        guard url.host?.lowercased().hasPrefix("calendar.") == true else { return false }
+        guard let host = url.host?.lowercased() else { return false }
+        if host == "www.google.com", url.path == "/calendar/event" {
+            return true
+        }
+        guard host.hasPrefix("calendar.") else { return false }
         return url.pathComponents.contains("event") || url.pathComponents.contains("eventedit")
     }
 
