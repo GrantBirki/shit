@@ -9,6 +9,23 @@ final class MeetingLinkTests: XCTestCase {
         XCTAssertEqual(MeetingLink.resolve(url: nil, location: link.absoluteString, notes: nil), link)
     }
 
+    func testCustomLinkEmbeddedInLocationWinsOverCalendarEntry() throws {
+        let link = try XCTUnwrap(URL(string: "https://video.example.org/room/123"))
+        let location = "Video room: " + link.absoluteString
+        for entry in ["https://calendar.example.org/event", "https://www.google.com/calendar/event?eid=123"] {
+            let url = try XCTUnwrap(URL(string: entry))
+            XCTAssertEqual(MeetingLink.resolve(url: url, location: location, notes: nil), link)
+        }
+        XCTAssertNil(MeetingLink.resolve(url: nil, location: nil, notes: "Agenda: " + link.absoluteString))
+    }
+
+    func testDirectionsDoNotReplaceACustomMeetingURL() throws {
+        let meeting = try XCTUnwrap(URL(string: "https://video.example.org/room/123"))
+        for location in ["https://maps.apple.com/?q=HQ", "Directions: https://maps.apple.com/?q=HQ"] {
+            XCTAssertEqual(MeetingLink.resolve(url: meeting, location: location, notes: nil), meeting)
+        }
+    }
+
     func testPrefersConferenceLinkToCalendarEntryAndAgenda() throws {
         let entry = try XCTUnwrap(URL(string: "https://calendar.google.com/calendar/event?id=123"))
         let notes = "Agenda: https://example.org/doc. Join: https://example.zoom.us/j/123?pwd=abc"

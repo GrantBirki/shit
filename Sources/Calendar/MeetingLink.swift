@@ -12,14 +12,31 @@ enum MeetingLink {
         for candidate in [eventURL, locationURL].compactMap(\.self) where isConferenceLink(candidate) {
             return candidate
         }
-        for text in [location, notes].compactMap(\.self) {
-            let range = NSRange(text.startIndex..., in: text)
-            let matches = detector?.matches(in: text, range: range) ?? []
-            if let link = matches.compactMap(\.url).first(where: isConferenceLink) {
-                return link
-            }
+        let locationLinks = detectedWebLinks(in: location)
+        // Calendar entry pages describe an event but do not join the meeting.
+        let fallback: URL? = if let eventURL, !isCalendarEntry(eventURL) {
+            eventURL
+        } else {
+            locationURL ?? locationLinks.first ?? eventURL
         }
-        return eventURL ?? locationURL
+        return locationLinks.first(where: isConferenceLink)
+            ?? detectedWebLinks(in: notes).first(where: isConferenceLink)
+            ?? fallback
+    }
+
+    private static func isCalendarEntry(_ url: URL) -> Bool {
+        guard let host = url.host?.lowercased() else { return false }
+        if host == "www.google.com", url.path == "/calendar/event" {
+            return true
+        }
+        guard host.hasPrefix("calendar.") else { return false }
+        return url.pathComponents.contains("event") || url.pathComponents.contains("eventedit")
+    }
+
+    private static func detectedWebLinks(in text: String?) -> [URL] {
+        guard let text else { return [] }
+        let matches = detector?.matches(in: text, range: NSRange(text.startIndex..., in: text)) ?? []
+        return matches.compactMap(\.url).compactMap(webURL)
     }
 
     private static func webURL(_ url: URL) -> URL? {

@@ -14,9 +14,9 @@ final class OverlayWindowTests: XCTestCase {
         let controller = OverlayWindowController(displayFrames: { frames })
         defer { controller.dismiss() }
 
-        controller.show(candidate: candidate("first")) { XCTFail("Dismissed the previous alert") }
+        controller.show(candidate: candidate("first"), lockFocus: true) { XCTFail("Dismissed the previous alert") }
         XCTAssertTrue(app.presentationOptions.contains(.disableProcessSwitching))
-        controller.show(candidate: candidate("second")) { controller.dismiss() }
+        controller.show(candidate: candidate("second"), lockFocus: true) { controller.dismiss() }
         XCTAssertTrue(app.presentationOptions.contains(.disableProcessSwitching))
         let windows = try visibleWindows(on: frames)
         try overlay(in: XCTUnwrap(windows.last)).onDismiss()
@@ -72,9 +72,10 @@ final class OverlayWindowTests: XCTestCase {
         window.makeKeyAndOrderFront(nil)
         let shortcut = try keyDown("j", keyCode: 38, modifiers: .command, in: window)
         XCTAssertTrue(window.performKeyEquivalent(with: shortcut))
+        XCTAssertTrue(window.hidesOnDeactivate)
         XCTAssertEqual(opened, [second])
         XCTAssertTrue(windows.allSatisfy(\.isVisible))
-        XCTAssertTrue(NSApp.presentationOptions.contains(.disableProcessSwitching))
+        XCTAssertEqual(NSApp.presentationOptions, originalOptions)
         canOpen = true
         XCTAssertTrue(window.performKeyEquivalent(with: shortcut))
         XCTAssertEqual(opened, [second, second])
@@ -143,11 +144,40 @@ final class OverlayWindowTests: XCTestCase {
         XCTAssertEqual(opened, [updated, updated])
     }
 
+    func testDismissShowsNextMeetingWithItsLatestCalendarDetails() throws {
+        let calendar = RefreshTestCalendar()
+        let frames = try twoDisplayFrames()
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: UUID().uuidString))
+        let app = AppController(
+            calendarProvider: calendar,
+            settings: SettingsStore(defaults: defaults),
+            overlayController: OverlayWindowController(displayFrames: { frames })
+        )
+        defer { app.stop() }
+
+        let start = Date().addingTimeInterval(295)
+        let first = MeetingEvent.fixture(id: "first", title: "First", startDate: start)
+        let second = MeetingEvent.fixture(id: "second", title: "Second", startDate: start)
+        calendar.meetings = [second, first]
+        app.refreshMeetingState()
+        app.refreshMeetingState()
+        let firstView = try overlay(in: XCTUnwrap(visibleWindows(on: frames).first))
+        XCTAssertEqual(firstView.candidate.event, first)
+
+        let updated = MeetingEvent.fixture(id: "second", title: "Renamed", startDate: start)
+        calendar.meetings = [first, updated]
+        firstView.onDismiss()
+        let nextView = try overlay(in: XCTUnwrap(visibleWindows(on: frames).first))
+        XCTAssertEqual(nextView.candidate.event, updated)
+        nextView.onDismiss()
+        XCTAssertTrue(try visibleWindows(on: []).isEmpty)
+    }
+
     func testDisplayChangesShowTheCurrentAlertAndRemoveDisconnectedCopies() throws {
         let originalOptions = NSApplication.shared.presentationOptions
         let frames = try twoDisplayFrames()
         var connected = [frames[0]]
-        let controller = OverlayWindowController(displayFrames: { connected })
+        let controller = OverlayWindowController(displayFrames: { connected }, isAppActive: { true })
         defer { controller.dismiss() }
         controller.show(candidate: candidate("first")) {}
         controller.show(candidate: candidate("current")) { controller.dismiss() }
@@ -170,11 +200,35 @@ final class OverlayWindowTests: XCTestCase {
         connected = [frames[0]]
         NotificationCenter.default.post(name: NSApplication.didChangeScreenParametersNotification, object: NSApp)
         let reconnected = try XCTUnwrap(visibleWindows(on: connected).first)
-        XCTAssertTrue(NSApp.presentationOptions.contains(.disableProcessSwitching))
+        XCTAssertEqual(NSApp.presentationOptions, originalOptions)
         try overlay(in: reconnected).onDismiss()
         connected = frames
         NotificationCenter.default.post(name: NSApplication.didChangeScreenParametersNotification, object: NSApp)
         XCTAssertTrue(try visibleWindows(on: []).isEmpty)
+    }
+
+    func testUnlockedRefreshWaitsUntilTheAppReturnsToTheForeground() throws {
+        let frames = try twoDisplayFrames()
+        var active = true
+        var connected = [frames[0]]
+        let controller = OverlayWindowController(displayFrames: { connected }, isAppActive: { active })
+        defer { controller.dismiss() }
+        controller.show(candidate: candidate("current")) {}
+        let window = try XCTUnwrap(visibleWindows(on: connected).first)
+
+        active = false
+        window.orderOut(nil)
+        controller.show(candidate: candidate("updated"), requestFocus: false) {}
+        XCTAssertEqual(try overlay(in: window).candidate.event.id, "updated")
+        connected = frames
+        NotificationCenter.default.post(name: NSApplication.didChangeScreenParametersNotification, object: NSApp)
+        XCTAssertTrue(try visibleWindows(on: []).isEmpty)
+
+        active = true
+        NotificationCenter.default.post(name: NSApplication.didBecomeActiveNotification, object: NSApp)
+        for window in try visibleWindows(on: connected) {
+            XCTAssertEqual(try overlay(in: window).candidate.event.id, "updated")
+        }
     }
 
     private func candidate(_ id: String, meetingURL: URL? = nil) -> AlertCandidate {
@@ -205,6 +259,98 @@ final class OverlayWindowTests: XCTestCase {
             windowNumber: window.windowNumber, context: nil, characters: characters,
             charactersIgnoringModifiers: characters, isARepeat: false, keyCode: keyCode
         ))
+    }
+}
+
+extension OverlayWindowTests {
+    func testRealReminderReplacesPreviewAndLaterReminderReplacesHiddenWindow() throws {
+        let frames = try twoDisplayFrames()
+        var active = true
+        let calendar = RefreshTestCalendar()
+        let controller = OverlayWindowController(displayFrames: { frames }, isAppActive: { active })
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: UUID().uuidString))
+        let app = AppController(
+            calendarProvider: calendar, settings: SettingsStore(defaults: defaults), overlayController: controller
+        )
+        defer { app.stop() }
+
+        app.showTestAlert()
+        let start = Date().addingTimeInterval(295)
+        let first = MeetingEvent.fixture(id: "first", startDate: start)
+        calendar.meetings = [first]
+        app.refreshMeetingState()
+        let windows = try visibleWindows(on: frames)
+        XCTAssertEqual(try overlay(in: windows[0]).candidate.event, first)
+
+        active = false
+        windows.forEach { $0.orderOut(nil) }
+        let second = MeetingEvent.fixture(id: "second", startDate: start)
+        calendar.meetings.append(second)
+        app.refreshMeetingState()
+        for window in try visibleWindows(on: frames) {
+            XCTAssertEqual(try overlay(in: window).candidate.event, second)
+        }
+    }
+
+    func testFirstDisplayShowsReminderEvenIfAppIsInactive() throws {
+        let frames = try twoDisplayFrames()
+        var connected: [NSRect] = []
+        let controller = OverlayWindowController(displayFrames: { connected }, isAppActive: { false })
+        defer { controller.dismiss() }
+        controller.show(candidate: candidate("waiting")) {}
+        controller.show(candidate: candidate("updated"), requestFocus: false) {}
+        connected = frames
+        NotificationCenter.default.post(name: NSApplication.didChangeScreenParametersNotification, object: NSApp)
+        for window in try visibleWindows(on: frames) {
+            XCTAssertEqual(try overlay(in: window).candidate.event.id, "updated")
+        }
+    }
+
+    func testJoiningPausesOnlyTheCurrentBatchAndLockedDismissReleasesFocus() throws {
+        let frames = try twoDisplayFrames()
+        let calendar = RefreshTestCalendar()
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: UUID().uuidString))
+        let settings = SettingsStore(defaults: defaults)
+        settings.lockAlertFocus = true
+        let link = try XCTUnwrap(URL(string: "https://video.example.org/room"))
+        var opened: [URL] = []
+        let controller = OverlayWindowController(displayFrames: { frames }, openURL: {
+            opened.append($0)
+            return true
+        })
+        let app = AppController(calendarProvider: calendar, settings: settings, overlayController: controller)
+        defer { app.stop() }
+        let originalOptions = NSApp.presentationOptions
+        let start = Date().addingTimeInterval(295)
+        let first = MeetingEvent.fixture(id: "a", title: "A", startDate: start, meetingURL: link)
+        let second = MeetingEvent.fixture(id: "b", title: "B", startDate: start)
+        let third = MeetingEvent.fixture(id: "c", title: "C", startDate: start)
+        calendar.meetings = [first, second]
+        app.refreshMeetingState()
+        let view = try overlay(in: XCTUnwrap(visibleWindows(on: frames).first))
+        try XCTUnwrap(view.onOpenMeeting)()
+        XCTAssertEqual(opened, [link])
+        app.refreshMeetingState()
+        XCTAssertTrue(try visibleWindows(on: []).isEmpty)
+        XCTAssertEqual(NSApp.presentationOptions, originalOptions)
+
+        let fourth = MeetingEvent.fixture(id: "d", title: "D", startDate: start)
+        calendar.meetings += [third, fourth]
+        app.refreshMeetingState()
+        let fresh = try overlay(in: XCTUnwrap(visibleWindows(on: frames).first))
+        XCTAssertEqual(fresh.candidate.event, third)
+        fresh.onDismiss()
+        app.refreshMeetingState()
+        XCTAssertTrue(try visibleWindows(on: []).isEmpty)
+        XCTAssertEqual(NSApp.presentationOptions, originalOptions)
+
+        app.showCurrentAlert()
+        let remaining = try overlay(in: XCTUnwrap(visibleWindows(on: frames).first))
+        XCTAssertEqual(remaining.candidate.event, second)
+        remaining.onDismiss()
+        app.showCurrentAlert()
+        let last = try overlay(in: XCTUnwrap(visibleWindows(on: frames).first))
+        XCTAssertEqual(last.candidate.event, fourth)
     }
 }
 
