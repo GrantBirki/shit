@@ -200,19 +200,18 @@ final class MeetingDetectorTests: XCTestCase {
         XCTAssertEqual(due.map(\.offset), [thirtyMinutes, .fiveMinutesBefore])
     }
 
-    func testNextMeetingIgnoresCurrentMeeting() {
+    func testSelectsCurrentAndNextFromFilteredEventsAtMeetingStart() {
         let now = referenceDate
-        let current = MeetingEvent.fixture(id: "current", startDate: now.addingTimeInterval(-30))
+        let current = MeetingEvent.fixture(id: "current", startDate: now)
         let next = MeetingEvent.fixture(id: "next", startDate: now.addingTimeInterval(600))
+        let free = MeetingEvent.fixture(id: "free", startDate: now.addingTimeInterval(60), availability: .free)
+        let later = MeetingEvent.fixture(id: "later", startDate: now.addingTimeInterval(1200))
+        let filtered = detector.filteredEvents(
+            events: [later, free, next, current], filter: MeetingFilterSettings(), now: now
+        )
 
-        XCTAssertEqual(
-            detector.currentMeeting(events: [current, next], filter: MeetingFilterSettings(), now: now)?.id,
-            "current"
-        )
-        XCTAssertEqual(
-            detector.nextMeeting(events: [current, next], filter: MeetingFilterSettings(), now: now)?.id,
-            "next"
-        )
+        XCTAssertEqual(detector.currentMeeting(filteredEvents: filtered, now: now), current)
+        XCTAssertEqual(detector.nextMeeting(filteredEvents: filtered, now: now), next)
     }
 
     func testMeetingIsNotCurrentAtExactEndDate() {
@@ -224,7 +223,7 @@ final class MeetingDetectorTests: XCTestCase {
         )
 
         XCTAssertFalse(event.isActive(at: now))
-        XCTAssertNil(detector.currentMeeting(events: [event], filter: MeetingFilterSettings(), now: now))
+        XCTAssertNil(detector.currentMeeting(filteredEvents: [event], now: now))
     }
 
     func testFilteredEventsSortsByStartDateThenTitle() {

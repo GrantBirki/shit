@@ -183,8 +183,7 @@ final class AppController {
         let queryEnd = now.addingTimeInterval(6 * 60 * 60)
         latestEvents = calendarProvider.events(start: now.addingTimeInterval(-15 * 60), end: queryEnd)
 
-        let filter = MeetingFilterSettings(settings: settings)
-        let filteredEvents = detector.filteredEvents(events: latestEvents, filter: filter, now: now)
+        let filteredEvents = filteredEvents(at: now)
         let candidates = detector.dueAlerts(
             filteredEvents: filteredEvents,
             offsets: settings.alertOffsets,
@@ -199,7 +198,7 @@ final class AppController {
             clearCurrentCandidateIfStale(now: now, filteredEvents: filteredEvents)
         }
 
-        updateMenu()
+        updateMenu(filteredEvents: filteredEvents, now: now)
     }
 
     private func showOverlay(for candidate: AlertCandidate) {
@@ -209,16 +208,23 @@ final class AppController {
         )
     }
 
+    private func filteredEvents(at now: Date) -> [MeetingEvent] {
+        detector.filteredEvents(events: latestEvents, filter: MeetingFilterSettings(settings: settings), now: now)
+    }
+
     private func updateMenu() {
         let now = Date()
-        let filter = MeetingFilterSettings(settings: settings)
+        updateMenu(filteredEvents: filteredEvents(at: now), now: now)
+    }
+
+    private func updateMenu(filteredEvents: [MeetingEvent], now: Date) {
         let currentCandidateEvent = currentCandidate?.event
         let currentMeeting = if currentCandidateEvent?.isActive(at: now) == true {
             currentCandidateEvent
         } else {
-            detector.currentMeeting(events: latestEvents, filter: filter, now: now)
+            detector.currentMeeting(filteredEvents: filteredEvents, now: now)
         }
-        let nextMeeting = detector.nextMeeting(events: latestEvents, filter: filter, now: now)
+        let nextMeeting = detector.nextMeeting(filteredEvents: filteredEvents, now: now)
         let state = MenuBarState(
             authorization: latestAuthorization,
             currentMeeting: currentMeeting,
@@ -239,8 +245,7 @@ final class AppController {
         }
 
         let now = Date()
-        let filter = MeetingFilterSettings(settings: settings)
-        guard let meeting = detector.currentMeeting(events: latestEvents, filter: filter, now: now) else {
+        guard let meeting = detector.currentMeeting(filteredEvents: filteredEvents(at: now), now: now) else {
             return
         }
         let candidate = AlertCandidate(event: meeting, offset: .atStart)
