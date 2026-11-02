@@ -139,17 +139,19 @@ final class SettingsStore: ObservableObject {
     private static func loadAlertSchedule(
         from defaults: UserDefaults
     ) -> StoredAlertSchedule {
-        if defaults.object(forKey: Keys.firstAlertMinutes) != nil {
-            guard let first = defaults.object(forKey: Keys.firstAlertMinutes) as? Int,
+        let storedFirst = defaults.object(forKey: Keys.firstAlertMinutes)
+        let storedSecond = defaults.object(forKey: Keys.secondAlertMinutes)
+        if storedFirst != nil || storedSecond != nil {
+            guard let first = (storedFirst ?? 5) as? Int,
                   AlertOffset.supportedMinutes.contains(first)
             else {
                 return StoredAlertSchedule(first: 5, second: nil, wasMigrated: false)
             }
 
-            guard defaults.object(forKey: Keys.secondAlertMinutes) != nil else {
+            guard let storedSecond else {
                 return StoredAlertSchedule(first: first, second: nil, wasMigrated: false)
             }
-            guard let second = defaults.object(forKey: Keys.secondAlertMinutes) as? Int,
+            guard let second = storedSecond as? Int,
                   AlertOffset.supportedMinutes.contains(second),
                   second < first
             else {

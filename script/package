@@ -31,9 +31,15 @@ PROJECT_PATH=$(find_project)
 
 DIST_DIR="${DIST_DIR:-$DIR/dist}"
 STAGING_DIR="${STAGING_DIR:-$DIR/build/package}"
-STAGING_APP="$STAGING_DIR/${APP_NAME}.app"
-ZIP_PATH="$DIST_DIR/${APP_NAME}.zip"
-NOTARY_ZIP="$STAGING_DIR/${APP_NAME}-notary.zip"
+if [[ "$APP_NAME" == */* ]]; then
+  echo -e "${RED}APP_NAME must be a file name.${OFF}"
+  exit 1
+fi
+mkdir -p "$STAGING_DIR" "$DIST_DIR"
+PACKAGE_DIR=$(mktemp -d "$STAGING_DIR/.package.XXXXXXXX")
+trap 'rm -rf -- "$PACKAGE_DIR"' EXIT
+STAGING_APP="$PACKAGE_DIR/${APP_NAME}.app"
+NOTARY_ZIP="$PACKAGE_DIR/${APP_NAME}-notary.zip"
 
 CODESIGN_IDENTITY="${CODESIGN_IDENTITY:-}"
 NOTARY_PROFILE="${NOTARY_PROFILE:-}"
@@ -42,9 +48,6 @@ ENTITLEMENTS_PATH="${ENTITLEMENTS_PATH:-}"
 if [[ -z "$ENTITLEMENTS_PATH" && -f "$DIR/${APP_NAME}.entitlements" ]]; then
   ENTITLEMENTS_PATH="$DIR/${APP_NAME}.entitlements"
 fi
-
-rm -rf "$DIST_DIR" "$STAGING_DIR"
-mkdir -p "$DIST_DIR" "$STAGING_DIR"
 
 echo -e "${BLUE}Packaging ${APP_NAME} (${CONFIGURATION})...${OFF}"
 
@@ -69,7 +72,6 @@ if [[ ! -d "$APP_PATH" ]]; then
   exit 1
 fi
 
-rm -rf "$STAGING_APP"
 ditto "$APP_PATH" "$STAGING_APP"
 
 if [[ -n "$NOTARY_PROFILE" && -z "$CODESIGN_IDENTITY" ]]; then
@@ -99,18 +101,34 @@ codesign --verify --deep --strict "$STAGING_APP"
 
 if [[ -n "$NOTARY_PROFILE" ]]; then
   require_tool xcrun "xcrun not found."
-  rm -f "$NOTARY_ZIP"
   ditto -c -k --sequesterRsrc --keepParent "$STAGING_APP" "$NOTARY_ZIP"
   xcrun notarytool submit "$NOTARY_ZIP" --wait --keychain-profile "$NOTARY_PROFILE"
   xcrun stapler staple "$STAGING_APP"
   codesign --verify --deep --strict "$STAGING_APP"
 fi
 
-rm -f "$ZIP_PATH"
+for output in "$DIST_DIR/${APP_NAME}.zip" "$DIST_DIR/${APP_NAME}.zip.sha256"; do
+  if [[ -d "$output" && ! -L "$output" ]]; then
+    echo -e "${RED}Expected a file at $output, found a directory.${OFF}"
+    exit 1
+  fi
+done
+
+OUTPUT_DIR=$(mktemp -d "$DIST_DIR/.package.XXXXXXXX")
+trap 'rm -rf -- "$PACKAGE_DIR" "$OUTPUT_DIR"' EXIT
+ZIP_PATH="$OUTPUT_DIR/${APP_NAME}.zip"
 ditto -c -k --sequesterRsrc --keepParent "$STAGING_APP" "$ZIP_PATH"
-
 SHA=$(shasum -a 256 "$ZIP_PATH" | awk '{print $1}')
-echo "$SHA" > "$DIST_DIR/${APP_NAME}.zip.sha256"
+echo "$SHA" > "${ZIP_PATH}.sha256"
 
-echo -e "${GREEN}OK${OFF} - Created $ZIP_PATH"
+# Serialize publishers and invalidate the old checksum before replacing its archive.
+lockf -kn "$DIST_DIR" bash -es -- "$DIST_DIR" "$ZIP_PATH" <<'PUBLISH'
+dist_dir=$1
+zip_path=$2
+rm -f -- "$dist_dir/${zip_path##*/}.sha256"
+mv -f -- "$zip_path" "$dist_dir/"
+mv -f -- "${zip_path}.sha256" "$dist_dir/"
+PUBLISH
+
+echo -e "${GREEN}OK${OFF} - Created $DIST_DIR/${APP_NAME}.zip"
 echo -e "${GREEN}OK${OFF} - SHA256 $SHA"
