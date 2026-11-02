@@ -207,6 +207,29 @@ final class OverlayWindowTests: XCTestCase {
         XCTAssertTrue(try visibleWindows(on: []).isEmpty)
     }
 
+    func testUnlockedRefreshWaitsUntilTheAppReturnsToTheForeground() throws {
+        let frames = try twoDisplayFrames()
+        var active = true
+        var connected = [frames[0]]
+        let controller = OverlayWindowController(displayFrames: { connected }, isAppActive: { active })
+        defer { controller.dismiss() }
+        controller.show(candidate: candidate("current")) {}
+        let window = try XCTUnwrap(visibleWindows(on: connected).first)
+
+        active = false
+        window.orderOut(nil)
+        controller.show(candidate: candidate("updated"), requestFocus: false) {}
+        connected = frames
+        NotificationCenter.default.post(name: NSApplication.didChangeScreenParametersNotification, object: NSApp)
+        XCTAssertTrue(try visibleWindows(on: []).isEmpty)
+
+        active = true
+        NotificationCenter.default.post(name: NSApplication.didBecomeActiveNotification, object: NSApp)
+        for window in try visibleWindows(on: connected) {
+            XCTAssertEqual(try overlay(in: window).candidate.event.id, "updated")
+        }
+    }
+
     private func candidate(_ id: String, meetingURL: URL? = nil) -> AlertCandidate {
         AlertCandidate(event: .fixture(id: id, startDate: Date(), meetingURL: meetingURL), offset: .atStart)
     }

@@ -7,15 +7,23 @@ final class OverlayWindowController {
     private var lockFocus = false
     private var currentOverlay: MeetingOverlayView?
     private var previousPresentationOptions: NSApplication.PresentationOptions?
+    private var presentationDeferred = false
+    private let isAppActive: () -> Bool
     private let displayFrames: () -> [NSRect]
     private let openURL: (URL) -> Bool
 
     init(
         displayFrames: @escaping () -> [NSRect] = { NSScreen.screens.map(\.frame) },
+        isAppActive: @escaping () -> Bool = { NSApp.isActive },
         openURL: @escaping (URL) -> Bool = { NSWorkspace.shared.open($0) }
     ) {
         self.displayFrames = displayFrames
         self.openURL = openURL
+        self.isAppActive = isAppActive
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(appBecameActive(_:)),
+            name: NSApplication.didBecomeActiveNotification, object: nil
+        )
         NotificationCenter.default.addObserver(
             self, selector: #selector(displaysDidChange(_:)),
             name: NSApplication.didChangeScreenParametersNotification, object: nil
@@ -30,6 +38,7 @@ final class OverlayWindowController {
     func show(
         candidate: AlertCandidate,
         lockFocus: Bool = false,
+        requestFocus: Bool = true,
         onDismiss: @escaping () -> Void
     ) {
         self.lockFocus = lockFocus
@@ -42,18 +51,25 @@ final class OverlayWindowController {
         }
         let view = MeetingOverlayView(candidate: candidate, onDismiss: onDismiss, onOpenMeeting: onOpenMeeting)
         currentOverlay = view
-        present(view, on: displayFrames())
+        present(view, on: displayFrames(), requestFocus: requestFocus)
     }
 
     @objc private func displaysDidChange(_: Notification) {
         guard let currentOverlay else { return }
         let frames = displayFrames()
         if Set(frames) != Set(windows.keys) {
-            present(currentOverlay, on: frames)
+            present(currentOverlay, on: frames, requestFocus: false)
         }
     }
 
-    private func present(_ view: MeetingOverlayView, on frames: [NSRect]) {
+    @objc private func appBecameActive(_: Notification) {
+        guard presentationDeferred, let currentOverlay else { return }
+        present(currentOverlay, on: displayFrames(), requestFocus: false)
+    }
+
+    private func present(_ view: MeetingOverlayView, on frames: [NSRect], requestFocus: Bool) {
+        presentationDeferred = !requestFocus && !lockFocus && !isAppActive()
+        guard !presentationDeferred else { return }
         for (frame, window) in windows where !frames.contains(frame) {
             window.orderOut(nil)
             windows.removeValue(forKey: frame)
@@ -120,6 +136,7 @@ final class OverlayWindowController {
 
     func dismiss() {
         currentOverlay = nil
+        presentationDeferred = false
         windows.values.forEach { $0.orderOut(nil) }
         windows.removeAll()
         updatePresentationOptions()

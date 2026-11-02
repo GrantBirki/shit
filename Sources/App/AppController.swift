@@ -129,7 +129,7 @@ final class AppController {
         NSTimeZone.resetSystemTimeZone()
         updateMenu()
         if let currentCandidate {
-            showOverlay(for: currentCandidate)
+            showOverlay(for: currentCandidate, requestFocus: false)
         }
     }
 
@@ -206,10 +206,11 @@ final class AppController {
         updateMenu(filteredEvents: filteredEvents, now: now)
     }
 
-    private func showOverlay(for candidate: AlertCandidate) {
+    private func showOverlay(for candidate: AlertCandidate, requestFocus: Bool = true) {
         overlayController.show(
             candidate: candidate,
             lockFocus: settings.lockAlertFocus,
+            requestFocus: requestFocus,
             onDismiss: { [weak self] in self?.dismiss(candidate: candidate) }
         )
     }
@@ -297,7 +298,7 @@ final class AppController {
         guard event != candidate.event else { return }
         let updated = AlertCandidate(event: event, offset: candidate.offset)
         currentCandidate = updated
-        showOverlay(for: updated)
+        showOverlay(for: updated, requestFocus: false)
     }
 
     private func dismiss(candidate: AlertCandidate) {
