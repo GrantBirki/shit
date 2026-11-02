@@ -27,11 +27,6 @@ struct SettingsView: View {
         }
         .padding(.top, 8)
         .frame(minWidth: 680, idealWidth: 720, minHeight: 500, idealHeight: 560)
-        .onKeyPress(keys: [.tab, KeyEquivalent("\u{19}")], phases: .down) { press in
-            guard press.modifiers == .control || press.modifiers == [.control, .shift] else { return .ignored }
-            selection = selection.adjacent(forward: !press.modifiers.contains(.shift))
-            return .handled
-        }
         .alert("Menu Bar Icon Hidden", isPresented: $showMenuBarHiddenAlert) {
             Button("OK", role: .cancel) {}
         } message: {

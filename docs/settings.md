@@ -1,6 +1,6 @@
 # Settings
 
-Use the General, Alerts, and Calendars tabs to move between settings. A glass capsule marks the selected tab. With Reduce Transparency turned on in macOS, the selection uses a fill and outline.
+Use Control-Tab and Control-Shift-Tab to switch between General, Alerts, and Calendars. You can also use the left and right arrow keys when the tabs have keyboard focus. A glass capsule marks the selected tab, with a fill and outline when Reduce Transparency is turned on in macOS.
 
 Shit stores settings in macOS `UserDefaults` under the app bundle identifier.
 

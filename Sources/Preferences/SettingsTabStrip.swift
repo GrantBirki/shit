@@ -21,7 +21,6 @@ enum SettingsTab: Int, CaseIterable {
 
 struct SettingsTabStrip: View {
     @Binding var selection: SettingsTab
-    @FocusState private var focusedTab: SettingsTab?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.layoutDirection) private var layoutDirection
@@ -45,27 +44,35 @@ struct SettingsTabStrip: View {
                         .contentShape(Capsule())
                 }
                 .buttonStyle(.plain)
-                .focused($focusedTab, equals: tab)
+                .focusable(false)
+                .keyboardShortcut(shortcut(for: tab))
                 .accessibilityAddTraits(selection == tab ? .isSelected : [])
             }
         }
+        .contentShape(.focusEffect, Capsule())
+        .focusable(interactions: .edit)
         .onKeyPress(keys: [.leftArrow, .rightArrow]) { press in
-            guard let focusedTab, press.modifiers.isDisjoint(with: [.shift, .control, .option, .command])
-            else { return .ignored }
+            guard press.modifiers.isDisjoint(with: [.shift, .control, .option, .command]) else { return .ignored }
             let forward = (press.key == .rightArrow) == (layoutDirection == .leftToRight)
-            selection = focusedTab.adjacent(forward: forward)
-            self.focusedTab = selection
+            selection = selection.adjacent(forward: forward)
             return .handled
-        }
-        .onChange(of: selection) {
-            if focusedTab != nil {
-                focusedTab = selection
-            }
         }
         .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: selection)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Settings sections")
         .accessibilityAddTraits(.isTabBar)
+    }
+
+    private func shortcut(for tab: SettingsTab) -> KeyboardShortcut? {
+        switch tab {
+        case selection.adjacent(forward: true):
+            KeyboardShortcut(.tab, modifiers: .control)
+        // AppKit translates Shift-Tab to the backtab character.
+        case selection.adjacent(forward: false):
+            KeyboardShortcut(KeyEquivalent("\u{19}"), modifiers: [.control, .shift])
+        default:
+            nil
+        }
     }
 
     @ViewBuilder private var selectedBackground: some View {
