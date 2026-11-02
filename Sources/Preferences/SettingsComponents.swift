@@ -177,13 +177,7 @@ struct CalendarToggleRow: View {
                 help: "Include \(calendar.title) in meeting alerts."
             )
         }
-        .padding(.horizontal, 12)
         .padding(.vertical, 9)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(.white.opacity(0.12), lineWidth: 1)
-        }
     }
 }
 

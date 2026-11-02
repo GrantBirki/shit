@@ -1,5 +1,7 @@
 # Settings
 
+Use the General, Alerts, and Calendars tabs to move between settings. A glass capsule marks the selected tab. With Reduce Transparency turned on in macOS, the selection uses a fill and outline.
+
 Shit stores settings in macOS `UserDefaults` under the app bundle identifier.
 
 ## Alert Timing

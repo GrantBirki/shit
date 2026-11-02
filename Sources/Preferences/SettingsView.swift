@@ -13,27 +13,25 @@ struct SettingsView: View {
     @State private var hasShownMenuBarHiddenAlert = false
 
     var body: some View {
-        TabView(selection: $selection) {
-            generalPage
-                .tag(SettingsTab.general)
-                .tabItem {
-                    Label("General", systemImage: "gearshape")
-                }
+        VStack(spacing: 0) {
+            SettingsTabStrip(selection: $selection)
 
-            alertsPage
-                .tag(SettingsTab.alerts)
-                .tabItem {
-                    Label("Alerts", systemImage: "bell.badge")
-                }
-
-            calendarsPage
-                .tag(SettingsTab.calendars)
-                .tabItem {
-                    Label("Calendars", systemImage: "calendar")
-                }
+            switch selection {
+            case .general:
+                generalPage
+            case .alerts:
+                alertsPage
+            case .calendars:
+                calendarsPage
+            }
         }
         .padding(.top, 8)
         .frame(minWidth: 680, idealWidth: 720, minHeight: 500, idealHeight: 560)
+        .onKeyPress(keys: [.tab, KeyEquivalent("\u{19}")], phases: .down) { press in
+            guard press.modifiers == .control || press.modifiers == [.control, .shift] else { return .ignored }
+            selection = selection.adjacent(forward: !press.modifiers.contains(.shift))
+            return .handled
+        }
         .alert("Menu Bar Icon Hidden", isPresented: $showMenuBarHiddenAlert) {
             Button("OK", role: .cancel) {}
         } message: {
@@ -200,8 +198,11 @@ struct SettingsView: View {
                             "your work calendars."
                     )
                 } else {
-                    VStack(spacing: 8) {
+                    VStack(spacing: 0) {
                         ForEach(state.calendars) { calendar in
+                            if calendar.id != state.calendars.first?.id {
+                                Divider()
+                            }
                             CalendarToggleRow(
                                 calendar: calendar,
                                 isIncluded: Binding(
@@ -248,29 +249,31 @@ struct SettingsView: View {
             }
         }
     }
+}
 
-    private var firstAlertMinutes: Binding<Int> {
+private extension SettingsView {
+    var firstAlertMinutes: Binding<Int> {
         Binding(
             get: { settings.firstAlertMinutes },
             set: { settings.setFirstAlertMinutes($0) }
         )
     }
 
-    private var secondAlertEnabled: Binding<Bool> {
+    var secondAlertEnabled: Binding<Bool> {
         Binding(
             get: { settings.secondAlertMinutes != nil },
             set: { settings.setSecondAlertEnabled($0) }
         )
     }
 
-    private var secondAlertMinutes: Binding<Int> {
+    var secondAlertMinutes: Binding<Int> {
         Binding(
             get: { settings.secondAlertMinutes ?? 0 },
             set: { settings.setSecondAlertMinutes($0) }
         )
     }
 
-    private var menuBarIconVisible: Binding<Bool> {
+    var menuBarIconVisible: Binding<Bool> {
         Binding(
             get: { settings.menuBarIconVisible },
             set: { isVisible in
@@ -283,16 +286,10 @@ struct SettingsView: View {
         )
     }
 
-    private var secondAlertHelp: String {
+    var secondAlertHelp: String {
         if settings.canEnableSecondAlert {
             return "Add another alert closer to the meeting start."
         }
         return "Move the first alert before the meeting start to add a second alert."
     }
-}
-
-private enum SettingsTab: Hashable {
-    case general
-    case alerts
-    case calendars
 }

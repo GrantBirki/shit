@@ -36,7 +36,9 @@ By default, Shit alerts you 5 minutes before a meeting. You can set the first al
 
 You can switch apps with ⌘Tab while a reminder is visible. Enable **Block app switching during alerts** in Alerts settings to keep the reminder in front until dismissal. Click **Dismiss** or press **Escape** to close it on every display. That alert stays dismissed so it does not immediately pop back up. If you configured a second alert, dismissing the first does not cancel the later alert.
 
-Click **Open Meeting Link** or press **⌘J** to open the link with the default app. The overlay closes when macOS accepts the link. If the organizer changes or removes the link while the alert is open, the button and shortcut update on the next calendar refresh. Shit checks the event URL and recognizes web links embedded in the location. It also recognizes conference links in the event notes, including Google Meet, Zoom, Microsoft Teams, Webex, and FaceTime.
+Click **Open Meeting Link** or press **⌘J** to open the link with the default app. The overlay closes when macOS accepts the link. If macOS can't open it, choose **Copy Link** to copy the meeting URL, then dismiss the reminder and paste the link into your browser.
+
+If the organizer changes or removes the link while the alert is open, the button and shortcut update on the next calendar refresh. Shit checks the event URL and recognizes web links embedded in the location. It also recognizes conference links in the event notes, including Google Meet, Zoom, Microsoft Teams, Webex, and FaceTime.
 
 Shit shows the same full-screen alert on every display. Dismissing the alert or opening its meeting link from any display closes all copies. Dismissing an unlocked reminder shows the next eligible one. If you switch away, another due reminder can take its place. Joining a meeting or dismissing a locked reminder leaves the rest of that batch in the menu under **Show Current Alert**. Newly due reminders still appear automatically.
 

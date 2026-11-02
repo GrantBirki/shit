@@ -97,21 +97,27 @@ struct GlassMeetingCard: View {
     }
 }
 
-struct GlassProminentActionButton: View {
+struct GlassActionButton: View {
     let title: String
     let systemImage: String
-    var tint: Color = .orange
-    let isEnabled: Bool
+    let isProminent: Bool
     let action: () -> Void
 
     var body: some View {
+        Group {
+            if isProminent {
+                button.buttonStyle(.glassProminent).tint(.accentColor)
+            } else {
+                button.buttonStyle(.glass)
+            }
+        }
+        .controlSize(.extraLarge)
+    }
+
+    private var button: some View {
         Button(action: action) {
             Label(title, systemImage: systemImage)
-                .frame(minWidth: 150)
+                .frame(maxWidth: 180)
         }
-        .buttonStyle(.glassProminent)
-        .controlSize(.extraLarge)
-        .tint(isEnabled ? tint : .gray)
-        .disabled(!isEnabled)
     }
 }
