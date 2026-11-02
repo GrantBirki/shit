@@ -1,30 +1,18 @@
 import Foundation
 
 struct AlertStateStore {
-    private var dismissedKeys: [AlertKey: Date] = [:]
-    private var presentedKeys: [AlertKey: Date] = [:]
+    private var handledKeys: [AlertKey: Date] = [:]
 
-    mutating func shouldPresent(_ candidate: AlertCandidate, now: Date) -> Bool {
-        prune(expiredBefore: now)
-        if dismissedKeys[candidate.key] != nil {
-            return false
+    mutating func takeLatest(from dueAlerts: [AlertCandidate], now: Date) -> AlertCandidate? {
+        handledKeys = handledKeys.filter { $0.value > now }
+        let newAlerts = dueAlerts.filter { handledKeys[$0.key] == nil }
+        for alert in newAlerts {
+            handledKeys[alert.key] = alert.expirationDate
         }
-        if presentedKeys[candidate.key] != nil {
-            return false
-        }
-        return true
-    }
-
-    mutating func markPresented(_ candidate: AlertCandidate) {
-        presentedKeys[candidate.key] = candidate.expirationDate
+        return newAlerts.max { $0.triggerDate < $1.triggerDate }
     }
 
     mutating func dismiss(_ candidate: AlertCandidate) {
-        dismissedKeys[candidate.key] = candidate.expirationDate
-    }
-
-    private mutating func prune(expiredBefore date: Date) {
-        dismissedKeys = dismissedKeys.filter { $0.value > date }
-        presentedKeys = presentedKeys.filter { $0.value > date }
+        handledKeys[candidate.key] = candidate.expirationDate
     }
 }

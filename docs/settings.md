@@ -11,6 +11,7 @@ Controls when meeting alerts appear.
 - `0` means at the meeting start.
 - An optional second alert can be set closer to the meeting start.
 - Dismissing one alert does not cancel a later alert for the same meeting.
+- When several alerts are due at the same check, the alert with the latest trigger time replaces the visible alert.
 
 Advance alerts missed while the Mac is asleep are skipped instead of appearing late. An **At start** alert can still appear while the meeting is active, for up to 15 minutes after it begins.
 

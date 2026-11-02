@@ -3,6 +3,7 @@ import SwiftUI
 struct MeetingOverlayView: View {
     let candidate: AlertCandidate
     let onDismiss: () -> Void
+    let onOpenMeeting: (() -> Void)?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
@@ -23,6 +24,17 @@ struct MeetingOverlayView: View {
                     GlassMeetingCard(event: candidate.event)
 
                     HStack(spacing: 12) {
+                        if let onOpenMeeting {
+                            GlassProminentActionButton(
+                                title: "Open Meeting Link",
+                                systemImage: "video",
+                                tint: .blue,
+                                isEnabled: true,
+                                action: onOpenMeeting
+                            )
+                            .keyboardShortcut("j", modifiers: .command)
+                            .help("Open the meeting link (⌘J)")
+                        }
                         GlassProminentActionButton(
                             title: "Dismiss",
                             systemImage: "checkmark",
