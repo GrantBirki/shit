@@ -214,6 +214,21 @@ final class MeetingDetectorTests: XCTestCase {
         XCTAssertEqual(detector.nextMeeting(filteredEvents: filtered, now: now), next)
     }
 
+    func testPendingAlertSurvivesLookbackOnlyWhileMeetingAndOffsetRemainEligible() {
+        let start = referenceDate
+        let event = MeetingEvent.fixture(startDate: start, endDate: start.addingTimeInterval(600))
+        let candidate = AlertCandidate(event: event, offset: .fiveMinutesBefore)
+        let pending: Set = [candidate.key]
+        func reminders(_ events: [MeetingEvent], _ offsets: [AlertOffset], at now: Date) -> [AlertCandidate] {
+            detector.dueAlerts(filteredEvents: events, offsets: offsets, pendingKeys: pending, now: now)
+        }
+
+        XCTAssertEqual(reminders([event], [.fiveMinutesBefore], at: start), [candidate])
+        XCTAssertTrue(reminders([], [.fiveMinutesBefore], at: start).isEmpty)
+        XCTAssertTrue(reminders([event], [], at: start).isEmpty)
+        XCTAssertTrue(reminders([event], [.fiveMinutesBefore], at: event.endDate).isEmpty)
+    }
+
     func testMeetingIsNotCurrentAtExactEndDate() {
         let now = referenceDate
         let event = MeetingEvent.fixture(

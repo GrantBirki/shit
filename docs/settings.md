@@ -11,11 +11,15 @@ Controls when meeting alerts appear.
 - `0` means at the meeting start.
 - An optional second alert can be set closer to the meeting start.
 - Dismissing one alert does not cancel a later alert for the same meeting.
-- When several alerts are due at the same check, the alert with the latest trigger time replaces the visible alert.
+- When several reminders are due, they appear one at a time in trigger order. Dismiss the visible reminder to see the next one.
 
 Advance alerts missed while the Mac is asleep are skipped instead of appearing late. An **At start** alert can still appear while the meeting is active, for up to 15 minutes after it begins.
 
 Meeting times follow the Mac's current timezone. Changing the system timezone refreshes the menu and any visible alert without restarting Shit or changing when alerts are due.
+
+## Alert Focus
+
+App switching stays available by default. To keep the alert in front and disable ⌘Tab until dismissal, enable **Block app switching during alerts** in Alerts settings.
 
 ## Calendar Filters
 

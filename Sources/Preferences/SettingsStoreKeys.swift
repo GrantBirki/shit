@@ -3,6 +3,7 @@ enum SettingsStoreKeys {
     static let alertTiming = "alertTiming"
     static let firstAlertMinutes = "firstAlertMinutes"
     static let secondAlertMinutes = "secondAlertMinutes"
+    static let lockAlertFocus = "lockAlertFocus"
     static let ignoreAllDayEvents = "ignoreAllDayEvents"
     static let ignoreFreeEvents = "ignoreFreeEvents"
     static let ignoreDeclinedEvents = "ignoreDeclinedEvents"

@@ -12,6 +12,10 @@ final class SettingsStore: ObservableObject {
     @Published private(set) var firstAlertMinutes: Int
     @Published private(set) var secondAlertMinutes: Int?
 
+    @Published var lockAlertFocus: Bool {
+        didSet { defaults.set(lockAlertFocus, forKey: Keys.lockAlertFocus) }
+    }
+
     @Published var ignoreAllDayEvents: Bool {
         didSet { defaults.set(ignoreAllDayEvents, forKey: Keys.ignoreAllDayEvents) }
     }
@@ -66,6 +70,7 @@ final class SettingsStore: ObservableObject {
         let alertSchedule = Self.loadAlertSchedule(from: defaults)
         firstAlertMinutes = alertSchedule.first
         secondAlertMinutes = alertSchedule.second
+        lockAlertFocus = defaults.bool(forKey: Keys.lockAlertFocus)
         ignoreAllDayEvents = defaults.object(forKey: Keys.ignoreAllDayEvents) as? Bool ?? true
         ignoreFreeEvents = defaults.object(forKey: Keys.ignoreFreeEvents) as? Bool ?? true
         ignoreDeclinedEvents = defaults.object(forKey: Keys.ignoreDeclinedEvents) as? Bool ?? true

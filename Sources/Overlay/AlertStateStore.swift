@@ -3,13 +3,20 @@ import Foundation
 struct AlertStateStore {
     private var handledKeys: [AlertKey: Date] = [:]
 
-    mutating func takeLatest(from dueAlerts: [AlertCandidate], now: Date) -> AlertCandidate? {
+    private(set) var pendingKeys: Set<AlertKey> = []
+
+    mutating func takeNext(from dueAlerts: [AlertCandidate], now: Date, canPresent: Bool = true) -> AlertCandidate? {
         handledKeys = handledKeys.filter { $0.value > now }
         let newAlerts = dueAlerts.filter { handledKeys[$0.key] == nil }
-        for alert in newAlerts {
-            handledKeys[alert.key] = alert.expirationDate
-        }
-        return newAlerts.max { $0.triggerDate < $1.triggerDate }
+        pendingKeys = Set(newAlerts.map(\.key))
+        guard canPresent, let next = newAlerts.first else { return nil }
+        pendingKeys.remove(next.key)
+        handledKeys[next.key] = next.expirationDate
+        return next
+    }
+
+    mutating func clearPending() {
+        pendingKeys.removeAll()
     }
 
     mutating func dismiss(_ candidate: AlertCandidate) {

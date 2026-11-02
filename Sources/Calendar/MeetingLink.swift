@@ -12,14 +12,16 @@ enum MeetingLink {
         for candidate in [eventURL, locationURL].compactMap(\.self) where isConferenceLink(candidate) {
             return candidate
         }
-        for text in [location, notes].compactMap(\.self) {
-            let range = NSRange(text.startIndex..., in: text)
-            let matches = detector?.matches(in: text, range: range) ?? []
-            if let link = matches.compactMap(\.url).first(where: isConferenceLink) {
-                return link
-            }
-        }
-        return eventURL ?? locationURL
+        let locationLinks = detectedWebLinks(in: location)
+        return locationLinks.first(where: isConferenceLink)
+            ?? detectedWebLinks(in: notes).first(where: isConferenceLink)
+            ?? locationURL ?? locationLinks.first ?? eventURL
+    }
+
+    private static func detectedWebLinks(in text: String?) -> [URL] {
+        guard let text else { return [] }
+        let matches = detector?.matches(in: text, range: NSRange(text.startIndex..., in: text)) ?? []
+        return matches.compactMap(\.url).compactMap(webURL)
     }
 
     private static func webURL(_ url: URL) -> URL? {

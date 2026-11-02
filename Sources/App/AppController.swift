@@ -176,6 +176,7 @@ final class AppController {
         latestAuthorization = calendarProvider.authorizationState
         guard latestAuthorization.canReadEvents else {
             latestEvents = []
+            alertState.clearPending()
             if !isTestCandidate(currentCandidate) {
                 currentCandidate = nil
                 overlayController.dismiss()
@@ -192,14 +193,14 @@ final class AppController {
         let candidates = detector.dueAlerts(
             filteredEvents: filteredEvents,
             offsets: settings.alertOffsets,
+            pendingKeys: alertState.pendingKeys,
             now: now
         )
 
-        if let candidate = alertState.takeLatest(from: candidates, now: now) {
+        refreshCurrentCandidate(now: now, filteredEvents: filteredEvents)
+        if let candidate = alertState.takeNext(from: candidates, now: now, canPresent: currentCandidate == nil) {
             currentCandidate = candidate
             showOverlay(for: candidate)
-        } else {
-            refreshCurrentCandidate(now: now, filteredEvents: filteredEvents)
         }
 
         updateMenu(filteredEvents: filteredEvents, now: now)
@@ -208,6 +209,7 @@ final class AppController {
     private func showOverlay(for candidate: AlertCandidate) {
         overlayController.show(
             candidate: candidate,
+            lockFocus: settings.lockAlertFocus,
             onDismiss: { [weak self] in self?.dismiss(candidate: candidate) }
         )
     }
@@ -303,6 +305,10 @@ final class AppController {
         alertState.dismiss(candidate)
         currentCandidate = nil
         overlayController.dismiss()
-        updateMenu()
+        if alertState.pendingKeys.isEmpty {
+            updateMenu()
+        } else {
+            refreshMeetingState()
+        }
     }
 }

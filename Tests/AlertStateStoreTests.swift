@@ -11,8 +11,8 @@ final class AlertStateStoreTests: XCTestCase {
         )
         var store = AlertStateStore()
 
-        XCTAssertEqual(store.takeLatest(from: [candidate], now: now), candidate)
-        XCTAssertNil(store.takeLatest(from: [candidate], now: now))
+        XCTAssertEqual(store.takeNext(from: [candidate], now: now), candidate)
+        XCTAssertNil(store.takeNext(from: [candidate], now: now))
     }
 
     func testDismissedAlertDoesNotPresentAgainUntilExpired() {
@@ -25,8 +25,8 @@ final class AlertStateStoreTests: XCTestCase {
 
         store.dismiss(candidate)
 
-        XCTAssertNil(store.takeLatest(from: [candidate], now: now.addingTimeInterval(30)))
-        XCTAssertEqual(store.takeLatest(from: [candidate], now: now.addingTimeInterval(61)), candidate)
+        XCTAssertNil(store.takeNext(from: [candidate], now: now.addingTimeInterval(30)))
+        XCTAssertEqual(store.takeNext(from: [candidate], now: now.addingTimeInterval(61)), candidate)
     }
 
     func testPresentedAlertStateIsPrunedAfterEventEnds() {
@@ -37,10 +37,10 @@ final class AlertStateStoreTests: XCTestCase {
         )
         var store = AlertStateStore()
 
-        XCTAssertEqual(store.takeLatest(from: [candidate], now: now), candidate)
+        XCTAssertEqual(store.takeNext(from: [candidate], now: now), candidate)
 
-        XCTAssertNil(store.takeLatest(from: [candidate], now: now.addingTimeInterval(30)))
-        XCTAssertEqual(store.takeLatest(from: [candidate], now: now.addingTimeInterval(61)), candidate)
+        XCTAssertNil(store.takeNext(from: [candidate], now: now.addingTimeInterval(30)))
+        XCTAssertEqual(store.takeNext(from: [candidate], now: now.addingTimeInterval(61)), candidate)
     }
 
     func testDismissingFirstAlertDoesNotSuppressSecondAlert() throws {
@@ -55,11 +55,11 @@ final class AlertStateStoreTests: XCTestCase {
 
         store.dismiss(first)
 
-        XCTAssertNil(store.takeLatest(from: [first], now: now))
-        XCTAssertEqual(store.takeLatest(from: [second], now: now), second)
+        XCTAssertNil(store.takeNext(from: [first], now: now))
+        XCTAssertEqual(store.takeNext(from: [second], now: now), second)
     }
 
-    func testNewestDueAlertSupersedesOlderAlertsWithoutReplayingThem() {
+    func testKeepsEachMeetingPendingUntilItCanBeShown() {
         let now = Date()
         let older = AlertCandidate(
             event: .fixture(id: "older", startDate: now.addingTimeInterval(-30)),
@@ -68,8 +68,13 @@ final class AlertStateStoreTests: XCTestCase {
         let newer = AlertCandidate(event: .fixture(id: "newer", startDate: now), offset: .atStart)
         var store = AlertStateStore()
 
-        XCTAssertEqual(store.takeLatest(from: [newer, older], now: now), newer)
-        store.dismiss(newer)
-        XCTAssertNil(store.takeLatest(from: [older, newer], now: now.addingTimeInterval(1)))
+        XCTAssertEqual(store.takeNext(from: [older, newer], now: now), older)
+        XCTAssertEqual(store.pendingKeys, [newer.key])
+        XCTAssertNil(store.takeNext(from: [older, newer], now: now, canPresent: false))
+        XCTAssertEqual(store.pendingKeys, [newer.key])
+        store.dismiss(older)
+        XCTAssertEqual(store.takeNext(from: [older, newer], now: now), newer)
+        XCTAssertTrue(store.pendingKeys.isEmpty)
+        XCTAssertNil(store.takeNext(from: [older, newer], now: now))
     }
 }
