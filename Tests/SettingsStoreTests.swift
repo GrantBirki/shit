@@ -15,6 +15,7 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(settings.firstAlertMinutes, 5)
         XCTAssertNil(settings.secondAlertMinutes)
         XCTAssertEqual(settings.alertOffsets, [.fiveMinutesBefore])
+        XCTAssertFalse(settings.lockAlertFocus)
         XCTAssertTrue(settings.ignoreAllDayEvents)
         XCTAssertTrue(settings.ignoreFreeEvents)
         XCTAssertTrue(settings.ignoreDeclinedEvents)
@@ -29,6 +30,7 @@ final class SettingsStoreTests: XCTestCase {
         var settings: SettingsStore? = SettingsStore(defaults: defaults)
         settings?.setFirstAlertMinutes(30)
         settings?.setSecondAlertMinutes(5)
+        settings?.lockAlertFocus = true
         settings?.ignoreAllDayEvents = false
         settings?.ignoreFreeEvents = false
         settings?.ignoreDeclinedEvents = false
@@ -43,6 +45,7 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(reloaded.secondAlertMinutes, 5)
         let thirtyMinutes = try XCTUnwrap(AlertOffset(minutesBefore: 30))
         XCTAssertEqual(reloaded.alertOffsets, [thirtyMinutes, .fiveMinutesBefore])
+        XCTAssertTrue(reloaded.lockAlertFocus)
         XCTAssertFalse(reloaded.ignoreAllDayEvents)
         XCTAssertFalse(reloaded.ignoreFreeEvents)
         XCTAssertFalse(reloaded.ignoreDeclinedEvents)

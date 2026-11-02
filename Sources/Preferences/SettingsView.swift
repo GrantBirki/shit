@@ -115,6 +115,15 @@ struct SettingsView: View {
 
                 Divider()
 
+                SettingsToggleRow(
+                    title: "Block app switching during alerts",
+                    systemImage: "lock",
+                    isOn: $settings.lockAlertFocus,
+                    help: "Keep the alert in front until you dismiss it or open the meeting link."
+                )
+
+                Divider()
+
                 HStack(alignment: .center, spacing: 14) {
                     Button(action: onTestAlert) {
                         Label("Test Alert", systemImage: "play.circle.fill")

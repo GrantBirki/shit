@@ -92,26 +92,26 @@ struct MeetingDetector {
     func dueAlerts(
         filteredEvents events: [MeetingEvent],
         offsets: [AlertOffset],
+        pendingKeys: Set<AlertKey> = [],
         now: Date
     ) -> [AlertCandidate] {
         events
             .flatMap { event in
                 offsets.compactMap { offset -> AlertCandidate? in
                     let candidate = AlertCandidate(event: event, offset: offset)
-                    return isDue(candidate, now: now) ? candidate : nil
+                    guard event.endDate > now else { return nil }
+                    return pendingKeys.contains(candidate.key) || isDue(candidate, now: now) ? candidate : nil
                 }
             }
             .sorted { $0.triggerDate < $1.triggerDate }
     }
 
-    func currentMeeting(events: [MeetingEvent], filter: MeetingFilterSettings, now: Date) -> MeetingEvent? {
-        filteredEvents(events: events, filter: filter, now: now)
-            .first { $0.isActive(at: now) }
+    func currentMeeting(filteredEvents: [MeetingEvent], now: Date) -> MeetingEvent? {
+        filteredEvents.first { $0.isActive(at: now) }
     }
 
-    func nextMeeting(events: [MeetingEvent], filter: MeetingFilterSettings, now: Date) -> MeetingEvent? {
-        filteredEvents(events: events, filter: filter, now: now)
-            .first { $0.startDate > now }
+    func nextMeeting(filteredEvents: [MeetingEvent], now: Date) -> MeetingEvent? {
+        filteredEvents.first { $0.startDate > now }
     }
 
     private func isDue(_ candidate: AlertCandidate, now: Date) -> Bool {
@@ -124,7 +124,6 @@ struct MeetingDetector {
 
         let triggerDate = candidate.triggerDate
         guard now >= triggerDate else { return false }
-        guard now <= candidate.event.endDate else { return false }
         return now.timeIntervalSince(triggerDate) <= dueLookback
     }
 

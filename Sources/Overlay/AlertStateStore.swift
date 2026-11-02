@@ -1,30 +1,36 @@
 import Foundation
 
 struct AlertStateStore {
-    private var dismissedKeys: [AlertKey: Date] = [:]
-    private var presentedKeys: [AlertKey: Date] = [:]
+    private var handledKeys: [AlertKey: Date] = [:]
 
-    mutating func shouldPresent(_ candidate: AlertCandidate, now: Date) -> Bool {
-        prune(expiredBefore: now)
-        if dismissedKeys[candidate.key] != nil {
-            return false
-        }
-        if presentedKeys[candidate.key] != nil {
-            return false
-        }
-        return true
+    private var pausedKeys: Set<AlertKey> = []
+    private(set) var pendingKeys: Set<AlertKey> = []
+
+    mutating func takeNext(from dueAlerts: [AlertCandidate], now: Date, canPresent: Bool = true) -> AlertCandidate? {
+        handledKeys = handledKeys.filter { $0.value > now }
+        let newAlerts = dueAlerts.filter { handledKeys[$0.key] == nil }
+        pendingKeys = Set(newAlerts.map(\.key))
+        pausedKeys.formIntersection(pendingKeys)
+        guard canPresent, let next = newAlerts.first(where: { !pausedKeys.contains($0.key) }) else { return nil }
+        pendingKeys.remove(next.key)
+        handledKeys[next.key] = next.expirationDate
+        return next
     }
 
-    mutating func markPresented(_ candidate: AlertCandidate) {
-        presentedKeys[candidate.key] = candidate.expirationDate
+    mutating func pausePending() {
+        pausedKeys = pendingKeys
+    }
+
+    mutating func resumePending() {
+        pausedKeys.removeAll()
+    }
+
+    mutating func clearPending() {
+        pendingKeys.removeAll()
+        pausedKeys.removeAll()
     }
 
     mutating func dismiss(_ candidate: AlertCandidate) {
-        dismissedKeys[candidate.key] = candidate.expirationDate
-    }
-
-    private mutating func prune(expiredBefore date: Date) {
-        dismissedKeys = dismissedKeys.filter { $0.value > date }
-        presentedKeys = presentedKeys.filter { $0.value > date }
+        handledKeys[candidate.key] = candidate.expirationDate
     }
 }

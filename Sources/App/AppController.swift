@@ -10,7 +10,7 @@ final class AppController {
     private let detector: MeetingDetector
     private var alertState = AlertStateStore()
     private let menuBarController: MenuBarController
-    private let overlayController = OverlayWindowController()
+    private let overlayController: OverlayWindowController
     private let settingsWindowController: SettingsWindowController
     private let aboutWindowController = AboutWindowController()
     private let launchAtLoginManager = LaunchAtLoginManager()
@@ -22,9 +22,14 @@ final class AppController {
     private var latestAuthorization: CalendarAuthorizationState = .notDetermined
     private var currentCandidate: AlertCandidate?
 
-    init(calendarProvider: CalendarEventProviding = EventKitCalendarEventProvider()) {
-        settings = SettingsStore()
+    init(
+        calendarProvider: CalendarEventProviding = EventKitCalendarEventProvider(),
+        settings: SettingsStore = SettingsStore(),
+        overlayController: OverlayWindowController = OverlayWindowController()
+    ) {
+        self.settings = settings
         self.calendarProvider = calendarProvider
+        self.overlayController = overlayController
         detector = MeetingDetector()
         settingsWindowController = SettingsWindowController(
             settings: settings,
@@ -124,7 +129,7 @@ final class AppController {
         NSTimeZone.resetSystemTimeZone()
         updateMenu()
         if let currentCandidate {
-            showOverlay(for: currentCandidate)
+            showOverlay(for: currentCandidate, requestFocus: false)
         }
     }
 
@@ -167,10 +172,11 @@ final class AppController {
         updateMenu()
     }
 
-    private func refreshMeetingState() {
+    func refreshMeetingState() {
         latestAuthorization = calendarProvider.authorizationState
         guard latestAuthorization.canReadEvents else {
             latestEvents = []
+            alertState.clearPending()
             if !isTestCandidate(currentCandidate) {
                 currentCandidate = nil
                 overlayController.dismiss()
@@ -183,47 +189,58 @@ final class AppController {
         let queryEnd = now.addingTimeInterval(6 * 60 * 60)
         latestEvents = calendarProvider.events(start: now.addingTimeInterval(-15 * 60), end: queryEnd)
 
-        let filter = MeetingFilterSettings(settings: settings)
-        let filteredEvents = detector.filteredEvents(events: latestEvents, filter: filter, now: now)
+        let filteredEvents = filteredEvents(at: now)
         let candidates = detector.dueAlerts(
             filteredEvents: filteredEvents,
             offsets: settings.alertOffsets,
+            pendingKeys: alertState.pendingKeys,
             now: now
         )
 
-        if let candidate = candidates.first(where: { alertState.shouldPresent($0, now: now) }) {
+        refreshCurrentCandidate(now: now, filteredEvents: filteredEvents)
+        let canPresent = currentCandidate == nil || isTestCandidate(currentCandidate)
+            || overlayController.hasHiddenReminder
+        if let candidate = alertState.takeNext(from: candidates, now: now, canPresent: canPresent) {
             currentCandidate = candidate
-            alertState.markPresented(candidate)
             showOverlay(for: candidate)
-        } else {
-            clearCurrentCandidateIfStale(now: now, filteredEvents: filteredEvents)
         }
 
-        updateMenu()
+        updateMenu(filteredEvents: filteredEvents, now: now)
     }
 
-    private func showOverlay(for candidate: AlertCandidate) {
+    private func showOverlay(for candidate: AlertCandidate, requestFocus: Bool = true) {
+        let lockFocus = settings.lockAlertFocus
         overlayController.show(
             candidate: candidate,
-            onDismiss: { [weak self] in self?.dismiss(candidate: candidate) }
+            lockFocus: lockFocus,
+            requestFocus: requestFocus,
+            onJoined: { [weak self] in self?.dismiss(candidate: candidate, pausePending: true) },
+            onDismiss: { [weak self] in self?.dismiss(candidate: candidate, pausePending: lockFocus) }
         )
+    }
+
+    private func filteredEvents(at now: Date) -> [MeetingEvent] {
+        detector.filteredEvents(events: latestEvents, filter: MeetingFilterSettings(settings: settings), now: now)
     }
 
     private func updateMenu() {
         let now = Date()
-        let filter = MeetingFilterSettings(settings: settings)
+        updateMenu(filteredEvents: filteredEvents(at: now), now: now)
+    }
+
+    private func updateMenu(filteredEvents: [MeetingEvent], now: Date) {
         let currentCandidateEvent = currentCandidate?.event
         let currentMeeting = if currentCandidateEvent?.isActive(at: now) == true {
             currentCandidateEvent
         } else {
-            detector.currentMeeting(events: latestEvents, filter: filter, now: now)
+            detector.currentMeeting(filteredEvents: filteredEvents, now: now)
         }
-        let nextMeeting = detector.nextMeeting(events: latestEvents, filter: filter, now: now)
+        let nextMeeting = detector.nextMeeting(filteredEvents: filteredEvents, now: now)
         let state = MenuBarState(
             authorization: latestAuthorization,
             currentMeeting: currentMeeting,
             nextMeeting: nextMeeting,
-            canShowCurrentAlert: currentCandidate != nil || currentMeeting != nil
+            canShowCurrentAlert: currentCandidate != nil || currentMeeting != nil || !alertState.pendingKeys.isEmpty
         )
         menuBarController.update(state: state)
         settingsWindowController.update(
@@ -232,15 +249,22 @@ final class AppController {
         )
     }
 
-    private func showCurrentAlert() {
+    func showCurrentAlert() {
+        alertState.resumePending()
         if let currentCandidate {
             showOverlay(for: currentCandidate)
             return
         }
 
+        if !alertState.pendingKeys.isEmpty {
+            refreshMeetingState()
+            if currentCandidate != nil {
+                return
+            }
+        }
+
         let now = Date()
-        let filter = MeetingFilterSettings(settings: settings)
-        guard let meeting = detector.currentMeeting(events: latestEvents, filter: filter, now: now) else {
+        guard let meeting = detector.currentMeeting(filteredEvents: filteredEvents(at: now), now: now) else {
             return
         }
         let candidate = AlertCandidate(event: meeting, offset: .atStart)
@@ -248,7 +272,7 @@ final class AppController {
         showOverlay(for: candidate)
     }
 
-    private func showTestAlert() {
+    func showTestAlert() {
         let startDate = Date().addingTimeInterval(5 * 60)
         let event = MeetingEvent(
             id: "test-alert-\(UUID().uuidString)",
@@ -269,31 +293,38 @@ final class AppController {
             && candidate.event.calendarID == "test-calendar"
     }
 
-    private func clearCurrentCandidateIfStale(now: Date, filteredEvents: [MeetingEvent]) {
+    private func refreshCurrentCandidate(now: Date, filteredEvents: [MeetingEvent]) {
         guard let candidate = currentCandidate else { return }
-        if now >= candidate.event.endDate {
+        let event: MeetingEvent? = if isTestCandidate(candidate) {
+            candidate.event
+        } else {
+            filteredEvents.first {
+                $0.id == candidate.event.id && $0.startDate == candidate.event.startDate
+            }
+        }
+        guard let event, event.endDate > now else {
             currentCandidate = nil
             overlayController.dismiss()
             return
         }
-        if isTestCandidate(candidate) {
-            return
-        }
-        let eventStillIncluded = filteredEvents.contains { event in
-            event.id == candidate.event.id && event.startDate == candidate.event.startDate
-        }
-        if !eventStillIncluded {
-            currentCandidate = nil
-            overlayController.dismiss()
-        }
+        guard event != candidate.event else { return }
+        let updated = AlertCandidate(event: event, offset: candidate.offset)
+        currentCandidate = updated
+        showOverlay(for: updated, requestFocus: false)
     }
 
-    private func dismiss(candidate: AlertCandidate) {
+    private func dismiss(candidate: AlertCandidate, pausePending: Bool) {
+        guard currentCandidate?.key == candidate.key else { return }
         alertState.dismiss(candidate)
-        if currentCandidate?.key == candidate.key {
-            currentCandidate = nil
-        }
+        currentCandidate = nil
         overlayController.dismiss()
-        updateMenu()
+        if pausePending {
+            alertState.pausePending()
+        }
+        if pausePending || alertState.pendingKeys.isEmpty {
+            updateMenu()
+        } else {
+            refreshMeetingState()
+        }
     }
 }
