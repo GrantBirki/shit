@@ -8,6 +8,12 @@ final class OverlayWindowController {
     private var currentOverlay: MeetingOverlayView?
     private var previousPresentationOptions: NSApplication.PresentationOptions?
     private var presentationDeferred = false
+    private var awaitingFirstDisplay = false
+
+    var hasHiddenReminder: Bool {
+        !lockFocus && !isAppActive() && !windows.isEmpty && !windows.values.contains(where: \.isVisible)
+    }
+
     private let isAppActive: () -> Bool
     private let displayFrames: () -> [NSRect]
     private let openURL: (URL) -> Bool
@@ -39,13 +45,14 @@ final class OverlayWindowController {
         candidate: AlertCandidate,
         lockFocus: Bool = false,
         requestFocus: Bool = true,
+        onJoined: (() -> Void)? = nil,
         onDismiss: @escaping () -> Void
     ) {
         self.lockFocus = lockFocus
         let onOpenMeeting = candidate.event.meetingURL.map { url in
             { [openURL] in
                 if openURL(url) {
-                    onDismiss()
+                    (onJoined ?? onDismiss)()
                 }
             }
         }
@@ -68,7 +75,10 @@ final class OverlayWindowController {
     }
 
     private func present(_ view: MeetingOverlayView, on frames: [NSRect], requestFocus: Bool) {
-        presentationDeferred = !requestFocus && !lockFocus && !isAppActive()
+        if requestFocus {
+            awaitingFirstDisplay = frames.isEmpty
+        }
+        presentationDeferred = !requestFocus && !awaitingFirstDisplay && !lockFocus && !isAppActive()
         for (frame, window) in windows where !frames.contains(frame) {
             window.orderOut(nil)
             windows.removeValue(forKey: frame)
@@ -85,7 +95,8 @@ final class OverlayWindowController {
             }
         }
         updatePresentationOptions()
-        if !presentationDeferred {
+        if !frames.isEmpty, !presentationDeferred {
+            awaitingFirstDisplay = false
             focusOverlay()
         }
     }
@@ -139,6 +150,7 @@ final class OverlayWindowController {
 
     func dismiss() {
         currentOverlay = nil
+        awaitingFirstDisplay = false
         presentationDeferred = false
         windows.values.forEach { $0.orderOut(nil) }
         windows.removeAll()

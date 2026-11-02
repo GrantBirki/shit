@@ -38,9 +38,9 @@ You can switch apps with ⌘Tab while a reminder is visible. Enable **Block app 
 
 Click **Open Meeting Link** or press **⌘J** to open the link with the default app. The overlay closes when macOS accepts the link. If the organizer changes or removes the link while the alert is open, the button and shortcut update on the next calendar refresh. Shit checks the event URL and recognizes web links embedded in the location. It also recognizes conference links in the event notes, including Google Meet, Zoom, Microsoft Teams, Webex, and FaceTime.
 
-Shit shows the same full-screen alert on every display. Dismissing the alert or opening its meeting link from any display closes all copies. Other due reminders wait their turn. When you close the current alert, Shit shows the next eligible reminder.
+Shit shows the same full-screen alert on every display. Dismissing the alert or opening its meeting link from any display closes all copies. Dismissing an unlocked reminder shows the next eligible one. If you switch away, another due reminder can take its place. Joining a meeting or dismissing a locked reminder leaves the rest of that batch in the menu under **Show Current Alert**. Newly due reminders still appear automatically.
 
-Advance alerts missed while the Mac is asleep are skipped instead of being shown late. An **At start** alert can still appear while the meeting is active, for up to 15 minutes after it begins.
+Advance alerts missed while the Mac is asleep are skipped instead of being shown late. Shit can first detect an **At start** reminder up to 15 minutes after the meeting begins. A reminder already in the queue stays eligible until the meeting ends.
 
 ## Calendar Permissions
 

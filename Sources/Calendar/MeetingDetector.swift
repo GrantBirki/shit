@@ -124,7 +124,6 @@ struct MeetingDetector {
 
         let triggerDate = candidate.triggerDate
         guard now >= triggerDate else { return false }
-        guard now <= candidate.event.endDate else { return false }
         return now.timeIntervalSince(triggerDate) <= dueLookback
     }
 

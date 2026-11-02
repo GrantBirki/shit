@@ -13,9 +13,20 @@ enum MeetingLink {
             return candidate
         }
         let locationLinks = detectedWebLinks(in: location)
+        // Calendar entry pages describe an event but do not join the meeting.
+        let fallback: URL? = if let eventURL, !isCalendarEntry(eventURL) {
+            eventURL
+        } else {
+            locationURL ?? locationLinks.first ?? eventURL
+        }
         return locationLinks.first(where: isConferenceLink)
             ?? detectedWebLinks(in: notes).first(where: isConferenceLink)
-            ?? locationURL ?? locationLinks.first ?? eventURL
+            ?? fallback
+    }
+
+    private static func isCalendarEntry(_ url: URL) -> Bool {
+        guard url.host?.lowercased().hasPrefix("calendar.") == true else { return false }
+        return url.pathComponents.contains("event") || url.pathComponents.contains("eventedit")
     }
 
     private static func detectedWebLinks(in text: String?) -> [URL] {
