@@ -69,7 +69,6 @@ final class OverlayWindowController {
 
     private func present(_ view: MeetingOverlayView, on frames: [NSRect], requestFocus: Bool) {
         presentationDeferred = !requestFocus && !lockFocus && !isAppActive()
-        guard !presentationDeferred else { return }
         for (frame, window) in windows where !frames.contains(frame) {
             window.orderOut(nil)
             windows.removeValue(forKey: frame)
@@ -80,11 +79,15 @@ final class OverlayWindowController {
             window.hidesOnDeactivate = !lockFocus
             window.onDismissShortcut = view.onDismiss
             window.contentViewController = NSHostingController(rootView: view)
-            window.setFrame(frame, display: true)
-            window.orderFront(nil)
+            window.setFrame(frame, display: !presentationDeferred)
+            if !presentationDeferred {
+                window.orderFront(nil)
+            }
         }
         updatePresentationOptions()
-        focusOverlay()
+        if !presentationDeferred {
+            focusOverlay()
+        }
     }
 
     private func updatePresentationOptions() {

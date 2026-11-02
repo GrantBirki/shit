@@ -177,7 +177,7 @@ final class OverlayWindowTests: XCTestCase {
         let originalOptions = NSApplication.shared.presentationOptions
         let frames = try twoDisplayFrames()
         var connected = [frames[0]]
-        let controller = OverlayWindowController(displayFrames: { connected })
+        let controller = OverlayWindowController(displayFrames: { connected }, isAppActive: { true })
         defer { controller.dismiss() }
         controller.show(candidate: candidate("first")) {}
         controller.show(candidate: candidate("current")) { controller.dismiss() }
@@ -219,6 +219,7 @@ final class OverlayWindowTests: XCTestCase {
         active = false
         window.orderOut(nil)
         controller.show(candidate: candidate("updated"), requestFocus: false) {}
+        XCTAssertEqual(try overlay(in: window).candidate.event.id, "updated")
         connected = frames
         NotificationCenter.default.post(name: NSApplication.didChangeScreenParametersNotification, object: NSApp)
         XCTAssertTrue(try visibleWindows(on: []).isEmpty)
